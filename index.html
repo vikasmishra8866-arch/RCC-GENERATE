@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 RC Renderer & Mapper (PDF/Image)</title>
+    <title>A4 RC Auto-Fill & Mapper (PDF/Image)</title>
     <!-- PDF.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
@@ -21,6 +21,7 @@
             --success: #10b981;
             --debug-line: rgba(59, 130, 246, 0.8);
             --debug-bg: rgba(59, 130, 246, 0.1);
+            --calibrate: #f59e0b;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -36,6 +37,7 @@
         button:hover { background: var(--border); }
         button.primary { background: var(--accent); color: white; border-color: var(--accent); }
         button.primary:hover { background: var(--accent-hover); }
+        button.calibrate-active { background: var(--calibrate); color: #000; border-color: var(--calibrate); }
         
         input[type="text"], input[type="number"], select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 8px; border-radius: 4px; outline: none; width: 100%; font-size: 0.85rem; }
         input:focus, select:focus, textarea:focus { border-color: var(--accent); }
@@ -45,7 +47,7 @@
         .workspace { display: flex; flex: 1; overflow: hidden; }
         
         /* Sidebars */
-        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); flex-shrink: 0; z-index: 5; }
+        .sidebar { background: var(--bg-panel); width: 380px; display: flex; flex-direction: column; border-right: 1px solid var(--border); flex-shrink: 0; z-index: 5; }
         .sidebar.right { border-right: none; border-left: 1px solid var(--border); width: 320px; }
         
         .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; background: #181818; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); flex-shrink: 0; }
@@ -67,7 +69,7 @@
         }
         
         .canvas-wrapper { 
-            margin: auto; /* Centers horizontally and vertically when smaller, allows scroll when larger */
+            margin: auto; 
             box-shadow: 0 0 20px rgba(0,0,0,0.8); 
             background: #fff;
         }
@@ -88,6 +90,8 @@
 
         /* Status Log */
         .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.85); padding: 5px 10px; font-size: 0.75rem; font-family: monospace; color: var(--success); z-index: 10; pointer-events: none; border-top: 1px solid var(--border);}
+        
+        .helper-text { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; line-height: 1.2; }
     </style>
 </head>
 <body>
@@ -95,7 +99,7 @@
     <header>
         <div class="logo">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            RC Renderer Pro
+            RC Auto-Fill
         </div>
         <div class="controls">
             <div style="display:flex; gap:6px; align-items:center;">
@@ -127,23 +131,30 @@
     <div class="workspace">
         <!-- Left Sidebar: JSON Inputs -->
         <div class="sidebar">
-            <div class="panel-header">JSON Configuration</div>
+            <div class="panel-header">Inputs</div>
             <div class="scroll-area">
                 <div>
-                    <label>Vehicle Data JSON</label>
-                    <textarea id="dataJsonArea" style="height: 120px;" placeholder='{ "regn_no": "GJ05CX1400" }'></textarea>
+                    <label>Vehicle Data JSON (Auto-fills)</label>
+                    <textarea id="dataJsonArea" style="height: 180px;" placeholder='{ "regn_no": "GJ05CX1400", "owner_name": "SACHIN", "address": "..." }'></textarea>
                 </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="parseDataAndRender()" class="primary" style="flex:1;">Render Now</button>
+                    <button onclick="formatDataJSON()">Format JSON</button>
+                </div>
+                
+                <hr style="border-color: var(--border); margin: 10px 0;">
+                
                 <div>
-                    <label>A4 Coordinate Map JSON</label>
-                    <textarea id="coordJsonArea" style="height: 250px;" placeholder='{ "pageSize": "A4", "fields": { ... } }'></textarea>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin-bottom:0;">A4 Coordinate Map</label>
+                        <button onclick="resetCoords()" style="padding: 2px 6px; font-size: 0.7rem;">Reset Default</button>
+                    </div>
+                    <textarea id="coordJsonArea" style="height: 200px; font-family: monospace; font-size: 0.75rem;"></textarea>
+                    <p class="helper-text">Edit values manually or use the Calibrate tool on the right.</p>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                    <button onclick="parseAndRender()" class="primary" style="flex:1;">Render Now</button>
-                    <button onclick="loadPreset()">Sample</button>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <button onclick="formatJSON()" style="flex:1;">Format JSON</button>
-                    <button onclick="copyCoordinates()" style="flex:1;">Copy Coords</button>
+                    <button onclick="parseCoordsAndRender()" class="primary" style="flex:1;">Apply Coords</button>
+                    <button onclick="formatCoordJSON()">Format</button>
                 </div>
             </div>
         </div>
@@ -157,19 +168,22 @@
             <div class="canvas-wrapper" id="canvasWrapper">
                 <canvas id="mainCanvas"></canvas>
             </div>
-            <div class="status-bar" id="statusLog">Ready. Please upload a blank RC template.</div>
+            <div class="status-bar" id="statusLog">Ready. Upload template & paste data.</div>
         </div>
 
         <!-- Right Sidebar: Fields & Fine-Tuning -->
         <div class="sidebar right">
-            <div class="panel-header">Mapped Fields</div>
+            <div class="panel-header">
+                Mapped Fields
+                <button id="calibrateBtn" onclick="toggleCalibrate()" style="padding: 2px 8px; font-size: 0.7rem;">Calibrate Mode</button>
+            </div>
             <div class="scroll-area" id="fieldList" style="max-height: 40%;">
-                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded.</div>
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">Paste data JSON to load fields.</div>
             </div>
             
             <div class="panel-header" style="border-top: 1px solid var(--border);">Inspector</div>
             <div class="inspector">
-                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field on the canvas or list to edit.</div>
+                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field to edit.</div>
                 
                 <div id="inspectorControls" style="display: none; flex-direction: column; gap: 10px;">
                     <div style="font-weight: bold; color: var(--accent); font-size: 0.9rem;" id="insKey">field_key</div>
@@ -209,18 +223,42 @@
         // Configure PDF.js Worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+        // --- Default Coordinates (A4 612x792 pt) ---
+        const DEFAULT_A4_COORDS = {
+            "refWidth": 612,
+            "refHeight": 792,
+            "fields": {
+                "regn_no":           { "x": 480, "y": 90,  "fontSize": 16, "fontWeight": "bold",   "maxWidth": 100, "align": "center", "color": "#000" },
+                "owner_name":        { "x": 60,  "y": 180, "fontSize": 12, "fontWeight": "normal", "maxWidth": 250, "align": "left",   "color": "#000" },
+                "son_daughter_wife_of":{ "x": 60, "y": 200, "fontSize": 10, "fontWeight": "normal", "maxWidth": 250, "align": "left",   "color": "#000" },
+                "address":           { "x": 60,  "y": 220, "fontSize": 10, "fontWeight": "normal", "maxWidth": 250, "align": "left",   "color": "#000", "lineHeight": 12 },
+                "chassis_no":        { "x": 380, "y": 180, "fontSize": 12, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "engine_no":         { "x": 380, "y": 200, "fontSize": 12, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "fuel":              { "x": 380, "y": 220, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "maker":             { "x": 380, "y": 240, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "model":             { "x": 380, "y": 260, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "date_of_regn":      { "x": 60,  "y": 320, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "vehicle_class":     { "x": 60,  "y": 340, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "regn_validity":     { "x": 60,  "y": 360, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "color":             { "x": 380, "y": 320, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" },
+                "body_type":         { "x": 380, "y": 340, "fontSize": 11, "fontWeight": "normal", "maxWidth": 150, "align": "left",   "color": "#000" }
+            }
+        };
+
         // --- State Management ---
         const state = {
-            bgCanvas: document.createElement('canvas'), // Offscreen buffer for PDF/Image
+            bgCanvas: document.createElement('canvas'), 
             pdfDoc: null,    
             currentPage: 1,
-            fields: [], 
+            fields: [], // Merged data + coords
             activeFieldId: null,
             showDebug: true,
+            calibrateMode: false,
             zoom: 1,
-            refWidth: 595.28,  // A4 Points Portrait
-            refHeight: 841.89, // A4 Points Portrait
-            renderScale: 2.5   // High-res scale for PDF rendering
+            refWidth: DEFAULT_A4_COORDS.refWidth,
+            refHeight: DEFAULT_A4_COORDS.refHeight,
+            renderScale: 2.5,
+            currentCoords: JSON.parse(JSON.stringify(DEFAULT_A4_COORDS)) // Deep copy
         };
 
         // --- DOM Elements ---
@@ -239,31 +277,7 @@
         const pdfControls = document.getElementById('pdfControls');
         const pageSelect = document.getElementById('pageSelect');
         const statusLog = document.getElementById('statusLog');
-
-        // --- Sample Presets ---
-        const PRESET_DATA = {
-            "regn_no": "GJ05CX1400",
-            "owner_name": "SACHIN TENDULKAR",
-            "address": "FLAT 10, CRICKET AVENUE, BANDRA WEST,\nMUMBAI, MAHARASHTRA - 400050",
-            "chassis_no": "MAT12345678901234",
-            "engine_no": "ENG987654321",
-            "fuel": "PETROL",
-            "maker": "HONDA",
-            "model": "ACTIVA 6G"
-        };
-
-        const PRESET_COORD = {
-            "pageSize": "A4",
-            "refWidth": 595.28,
-            "refHeight": 841.89,
-            "fields": {
-                "regn_no": { "x": 450, "y": 120, "fontSize": 16, "fontWeight": "bold", "maxWidth": 100, "align": "center", "color": "#000000" },
-                "owner_name": { "x": 100, "y": 220, "fontSize": 12, "fontWeight": "normal", "maxWidth": 250, "align": "left", "color": "#000000" },
-                "address": { "x": 100, "y": 250, "fontSize": 10, "fontWeight": "normal", "maxWidth": 300, "lineHeight": 14, "align": "left", "color": "#000000" },
-                "chassis_no": { "x": 400, "y": 220, "fontSize": 12, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" },
-                "engine_no": { "x": 400, "y": 250, "fontSize": 12, "fontWeight": "normal", "maxWidth": 150, "align": "center", "color": "#000000" }
-            }
-        };
+        const calibrateBtn = document.getElementById('calibrateBtn');
 
         // --- Status Logger ---
         function logMsg(msg, isError = false) {
@@ -273,14 +287,17 @@
 
         // --- Initialization ---
         function init() {
+            // Populate default coords box
+            coordJsonArea.value = JSON.stringify(DEFAULT_A4_COORDS, null, 2);
+            
             setupEvents();
-            // Initialize main canvas with A4 dummy size
+            
+            // Initialize blank A4 canvas
             canvas.width = Math.round(state.refWidth * state.renderScale);
             canvas.height = Math.round(state.refHeight * state.renderScale);
             state.bgCanvas.width = canvas.width;
             state.bgCanvas.height = canvas.height;
             
-            // Fill bg white
             bgCtx.fillStyle = '#ffffff';
             bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
 
@@ -288,51 +305,54 @@
             renderAll();
         }
 
-        // --- Core Rendering Engine ---
+        // --- Core Rendering ---
         function renderAll() {
-            // 1. Fill Main Canvas with White
+            // 1. White Background
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 2. Draw Background from Offscreen Buffer
+            // 2. Draw Offscreen Buffer (PDF/Image)
             if (state.bgCanvas.width > 0) {
                 ctx.drawImage(state.bgCanvas, 0, 0);
             }
 
-            // Calculate scale factors from A4 reference to high-res canvas
             const scaleX = canvas.width / state.refWidth;
             const scaleY = canvas.height / state.refHeight;
             const scaleFont = (scaleX + scaleY) / 2;
 
-            // 3. Draw Text Fields (Store base coords in A4 space, draw in canvas space)
+            // 3. Draw Fields (Only if they have a value)
             state.fields.forEach(f => {
-                ctx.fillStyle = f.color || '#000000';
-                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize * scaleFont}px Arial, sans-serif`;
-                ctx.textAlign = f.align || 'left';
-                ctx.textBaseline = 'top';
+                if (!f.value || f.value.trim() === "") return; // No empty boxes
 
                 const drawX = f.x * scaleX;
                 const drawY = f.y * scaleY;
                 const maxW = (f.maxWidth || state.refWidth) * scaleX;
+                const fSize = f.fontSize * scaleFont;
                 const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
+
+                ctx.fillStyle = f.color || '#000000';
+                ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`;
+                ctx.textAlign = f.align || 'left';
+                ctx.textBaseline = 'top';
 
                 drawWrappedText(ctx, f.value, drawX, drawY, maxW, lh);
             });
 
-            // 4. Draw Debug Markers
+            // 4. Draw Debug Markers (If enabled, draw for ALL loaded fields)
             if (state.showDebug) {
                 state.fields.forEach(f => {
                     const drawX = f.x * scaleX;
                     const drawY = f.y * scaleY;
                     const maxW = (f.maxWidth || state.refWidth) * scaleX;
-                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
                     const fSize = f.fontSize * scaleFont;
+                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
 
-                    ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`; // Needed for measureText
-                    const lines = getLines(ctx, f.value, maxW);
+                    ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`;
+                    const displayValue = f.value || "[Empty]";
+                    const lines = getLines(ctx, displayValue, maxW);
                     const totalHeight = lines.length * lh;
 
-                    ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--calibrate)' : 'var(--debug-line)';
                     ctx.lineWidth = Math.max(1, canvas.width / 800); 
                     ctx.setLineDash([5, 5]);
 
@@ -350,14 +370,89 @@
                     ctx.stroke();
 
                     // Label
-                    ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.fillStyle = state.activeFieldId === f.id ? 'var(--calibrate)' : 'var(--debug-line)';
                     ctx.font = `${Math.max(10, canvas.width/80)}px monospace`;
                     ctx.fillText(f.key, bx, drawY - 20);
                 });
             }
         }
 
-        // --- File Handling (PDF & Images) ---
+        // --- Logic: Parse Data & Coordinates ---
+        function parseDataAndRender() {
+            let dataObj = {};
+            try {
+                const str = dataJsonArea.value.trim();
+                if (str) dataObj = JSON.parse(str);
+            } catch (e) {
+                logMsg("Invalid Data JSON: " + e.message, true);
+                return;
+            }
+
+            // Merge with current coords
+            const coordMap = state.currentCoords.fields || {};
+            state.fields = [];
+
+            // Create field objects based on coord map, attaching data if it exists
+            for (const [key, coord] of Object.entries(coordMap)) {
+                state.fields.push({
+                    id: key,
+                    key: key,
+                    value: dataObj[key] !== undefined ? String(dataObj[key]) : "",
+                    ...coord
+                });
+            }
+
+            renderFieldList();
+            renderAll();
+            logMsg("Auto-filled fields from Data JSON.");
+        }
+
+        function parseCoordsAndRender() {
+            try {
+                const str = coordJsonArea.value.trim();
+                const parsed = JSON.parse(str);
+                
+                if (!parsed.fields) throw new Error("Missing 'fields' object in JSON.");
+                
+                state.currentCoords = parsed;
+                state.refWidth = parsed.refWidth || state.refWidth;
+                state.refHeight = parsed.refHeight || state.refHeight;
+
+                parseDataAndRender();
+                logMsg("Coordinates updated & rendered.");
+            } catch (e) {
+                logMsg("Invalid Coord JSON: " + e.message, true);
+            }
+        }
+
+        function resetCoords() {
+            state.currentCoords = JSON.parse(JSON.stringify(DEFAULT_A4_COORDS));
+            state.refWidth = DEFAULT_A4_COORDS.refWidth;
+            state.refHeight = DEFAULT_A4_COORDS.refHeight;
+            coordJsonArea.value = JSON.stringify(DEFAULT_A4_COORDS, null, 2);
+            parseDataAndRender();
+            logMsg("Coordinates reset to default.");
+        }
+
+        function updateCoordJsonBox() {
+            // Sync state back to textarea when modified via UI
+            state.currentCoords.fields = {};
+            state.fields.forEach(f => {
+                state.currentCoords.fields[f.key] = {
+                    x: parseFloat(f.x.toFixed(2)),
+                    y: parseFloat(f.y.toFixed(2)),
+                    maxWidth: parseFloat(f.maxWidth.toFixed(2)),
+                    fontSize: parseFloat(f.fontSize.toFixed(2)),
+                    lineHeight: parseFloat((f.lineHeight || (f.fontSize * 1.4)).toFixed(2)),
+                    fontWeight: f.fontWeight,
+                    align: f.align,
+                    color: f.color
+                };
+            });
+            coordJsonArea.value = JSON.stringify(state.currentCoords, null, 2);
+        }
+
+        // --- File Handling (PDF & Image) ---
         async function handleFileUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -393,7 +488,7 @@
             
             await renderPDFPage(1);
             dropzone.style.display = 'none';
-            logMsg("PDF Loaded successfully. Ready to render.");
+            logMsg("PDF Loaded. Adjust coords if needed.");
         }
 
         async function renderPDFPage(pageNum) {
@@ -405,11 +500,10 @@
             const page = await state.pdfDoc.getPage(pageNum);
             const viewport = page.getViewport({ scale: state.renderScale }); 
             
-            // Set offscreen buffer size
             state.bgCanvas.width = Math.round(viewport.width);
             state.bgCanvas.height = Math.round(viewport.height);
 
-            // 🔥 FIX: Fill white background BEFORE rendering PDF to prevent black screen
+            // 🔥 Fix: Solid white background before PDF render
             bgCtx.fillStyle = '#ffffff';
             bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
 
@@ -420,12 +514,11 @@
 
             await page.render(renderContext).promise;
             
-            // Set main canvas size to match
             canvas.width = state.bgCanvas.width;
             canvas.height = state.bgCanvas.height;
 
             fitToScreen();
-            renderAll();
+            parseDataAndRender();
         }
 
         async function handleImage(file) {
@@ -448,7 +541,7 @@
                         dropzone.style.display = 'none';
                         
                         fitToScreen();
-                        renderAll();
+                        parseDataAndRender();
                         logMsg("Image loaded successfully.");
                         resolve();
                     };
@@ -464,68 +557,7 @@
             renderPDFPage(parseInt(pageNum));
         }
 
-        function changeOrientation() {
-            const orientation = document.getElementById('orientationSelect').value;
-            if (orientation === 'portrait') {
-                state.refWidth = 595.28;
-                state.refHeight = 841.89;
-            } else {
-                state.refWidth = 841.89;
-                state.refHeight = 595.28;
-            }
-            
-            // Update JSON box dimensions
-            try {
-                const parsed = JSON.parse(coordJsonArea.value);
-                parsed.refWidth = state.refWidth;
-                parsed.refHeight = state.refHeight;
-                parsed.pageSize = orientation === 'portrait' ? "A4" : "A4-Landscape";
-                coordJsonArea.value = JSON.stringify(parsed, null, 2);
-            } catch (e) { }
-            
-            parseAndRender();
-        }
-
-        // --- JSON Parsing & Scaling ---
-        function parseAndRender() {
-            try {
-                const dataStr = dataJsonArea.value.trim();
-                const coordStr = coordJsonArea.value.trim();
-                
-                if (!coordStr) return;
-
-                const dataObj = dataStr ? JSON.parse(dataStr) : {};
-                const coordObj = JSON.parse(coordStr);
-
-                if (coordObj.refWidth && coordObj.refHeight) {
-                    state.refWidth = coordObj.refWidth;
-                    state.refHeight = coordObj.refHeight;
-                }
-
-                state.fields = [];
-                const fieldMap = coordObj.fields || coordObj.coordinates || coordObj; 
-
-                for (const [key, config] of Object.entries(fieldMap)) {
-                    if (key === 'pageSize' || key === 'refWidth' || key === 'refHeight') continue;
-                    
-                    state.fields.push({
-                        id: key,
-                        key: key,
-                        value: dataObj[key] || "",
-                        ...config
-                    });
-                }
-
-                renderFieldList();
-                renderAll();
-                logMsg(`Rendered ${state.fields.length} fields.`);
-                
-            } catch (err) {
-                logMsg(`JSON Error: ${err.message}`, true);
-            }
-        }
-
-        // --- Text Wrapping Logic ---
+        // --- Text Rendering & Wrapping ---
         function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
             const lines = getLines(ctx, text, maxWidth);
             lines.forEach((line, index) => {
@@ -557,18 +589,20 @@
             return allLines;
         }
 
-        // --- UI Interactivity ---
+        // --- UI & Inspector ---
         function renderFieldList() {
             fieldListEl.innerHTML = '';
             if (state.fields.length === 0) {
-                fieldListEl.innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: 20px;">No fields loaded.</div>';
+                fieldListEl.innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: 20px;">Paste Data JSON to load fields.</div>';
                 return;
             }
 
             state.fields.forEach(f => {
+                const isFilled = f.value && f.value.trim() !== "";
                 const div = document.createElement('div');
                 div.className = `field-item ${state.activeFieldId === f.id ? 'active' : ''}`;
-                div.innerHTML = `<span style="font-weight:600; font-size:0.85rem;">${f.key}</span> <span style="color:var(--text-muted); font-size:0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.value}</span>`;
+                div.innerHTML = `<span style="font-weight:600; font-size:0.85rem; ${!isFilled ? 'color:var(--text-muted)' : ''}">${f.key}</span> 
+                                 <span style="color:var(--text-muted); font-size:0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${isFilled ? f.value : '(empty)'}</span>`;
                 div.onclick = () => selectField(f.id);
                 fieldListEl.appendChild(div);
             });
@@ -612,46 +646,17 @@
                 field[prop] = val;
             }
             renderAll();
-        }
-
-        function copyCoordinates() {
-            const output = {
-                pageSize: document.getElementById('orientationSelect').value === 'portrait' ? "A4" : "A4-Landscape",
-                refWidth: state.refWidth,
-                refHeight: state.refHeight,
-                fields: {}
-            };
-
-            state.fields.forEach(f => {
-                output.fields[f.key] = {
-                    x: parseFloat(f.x.toFixed(2)),
-                    y: parseFloat(f.y.toFixed(2)),
-                    maxWidth: parseFloat(f.maxWidth.toFixed(2)),
-                    fontSize: parseFloat(f.fontSize.toFixed(2)),
-                    lineHeight: parseFloat((f.lineHeight || (f.fontSize * 1.4)).toFixed(2)),
-                    fontWeight: f.fontWeight,
-                    align: f.align,
-                    color: f.color
-                };
-            });
-
-            const jsonStr = JSON.stringify(output, null, 2);
-            coordJsonArea.value = jsonStr;
-            navigator.clipboard.writeText(jsonStr).then(() => {
-                logMsg("Updated Coordinate JSON copied to clipboard!");
-            });
+            updateCoordJsonBox(); // Keep JSON in sync
         }
 
         // --- Canvas Interactions ---
         function setupEvents() {
-            // Auto-parse JSON
+            // Auto-parse Data JSON
             let timeout = null;
-            const debounceParse = () => {
+            dataJsonArea.addEventListener('input', () => {
                 clearTimeout(timeout);
-                timeout = setTimeout(parseAndRender, 500);
-            };
-            dataJsonArea.addEventListener('input', debounceParse);
-            coordJsonArea.addEventListener('input', debounceParse);
+                timeout = setTimeout(parseDataAndRender, 800);
+            });
 
             // Zoom via Ctrl+Scroll
             container.addEventListener('wheel', (e) => {
@@ -661,29 +666,46 @@
                 }
             });
 
-            // Click to Select Field
+            // Click on Canvas (Select field or Calibrate)
             canvas.addEventListener('mousedown', (e) => {
                 if (state.fields.length === 0) return;
+                
                 const rect = canvas.getBoundingClientRect();
-                // True base canvas coordinates
                 const baseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
                 const baseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
 
                 const scaleX = canvas.width / state.refWidth;
                 const scaleY = canvas.height / state.refHeight;
-                const scaleFont = (scaleX + scaleY) / 2;
 
-                // Reverse iterate to find top-most field
+                // 🔥 CALIBRATE MODE
+                if (state.calibrateMode && state.activeFieldId) {
+                    const field = state.fields.find(f => f.id === state.activeFieldId);
+                    if (field) {
+                        // Convert click to A4 coordinates
+                        field.x = baseX / scaleX;
+                        field.y = baseY / scaleY;
+                        
+                        updateInspector();
+                        updateCoordJsonBox();
+                        renderAll();
+                        logMsg(`Calibrated ${field.key} to (${field.x.toFixed(1)}, ${field.y.toFixed(1)})`);
+                    }
+                    return; // Don't select another field while calibrating
+                }
+
+                // 🔥 SELECT FIELD MODE
+                const scaleFont = (scaleX + scaleY) / 2;
                 for (let i = state.fields.length - 1; i >= 0; i--) {
                     const f = state.fields[i];
                     const drawX = f.x * scaleX;
                     const drawY = f.y * scaleY;
                     const maxW = (f.maxWidth || state.refWidth) * scaleX;
-                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
                     const fSize = f.fontSize * scaleFont;
+                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
 
                     ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`;
-                    const lines = getLines(ctx, f.value, maxW);
+                    const displayVal = f.value || "[Empty]";
+                    const lines = getLines(ctx, displayVal, maxW);
                     const totalHeight = lines.length * lh;
                     
                     let bx = drawX;
@@ -696,7 +718,8 @@
                         return;
                     }
                 }
-                // Click empty space: deselect
+                
+                // Deselect if empty space clicked
                 state.activeFieldId = null;
                 updateInspector();
                 renderAll();
@@ -720,6 +743,7 @@
                 if (changed) {
                     e.preventDefault();
                     updateInspector();
+                    updateCoordJsonBox();
                     renderAll();
                 }
             });
@@ -736,6 +760,19 @@
             });
         }
 
+        function toggleCalibrate() {
+            state.calibrateMode = !state.calibrateMode;
+            if (state.calibrateMode) {
+                calibrateBtn.classList.add('calibrate-active');
+                calibrateBtn.innerText = "Click Canvas to Set";
+                logMsg("Calibrate Mode ON: Click a field in the list, then click on the canvas to place it.");
+            } else {
+                calibrateBtn.classList.remove('calibrate-active');
+                calibrateBtn.innerText = "Calibrate Mode";
+                logMsg("Calibrate Mode OFF.");
+            }
+        }
+
         // --- Helpers ---
         function zoom(delta) {
             state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 5));
@@ -744,9 +781,8 @@
 
         function fitToScreen() {
             if (!canvas.width || !canvas.height) return;
-            // Wait for layout to settle
             requestAnimationFrame(() => {
-                const containerW = container.clientWidth - 60; // padding buffer
+                const containerW = container.clientWidth - 60;
                 const containerH = container.clientHeight - 60;
                 const scaleX = containerW / canvas.width;
                 const scaleY = containerH / canvas.height;
@@ -756,7 +792,6 @@
         }
 
         function applyZoom() {
-            // Set visual CSS size strictly based on base canvas width/height * zoom
             canvas.style.width = `${Math.round(canvas.width * state.zoom)}px`;
             canvas.style.height = `${Math.round(canvas.height * state.zoom)}px`;
         }
@@ -766,46 +801,26 @@
             renderAll();
         }
 
-        function loadPreset() {
-            dataJsonArea.value = JSON.stringify(PRESET_DATA, null, 2);
-            coordJsonArea.value = JSON.stringify(PRESET_COORD, null, 2);
-            
-            if (!state.bgCanvas.width || state.bgCanvas.width === 0) {
-                // Create blank white A4 canvas if no PDF is loaded
-                state.bgCanvas.width = Math.round(state.refWidth * state.renderScale);
-                state.bgCanvas.height = Math.round(state.refHeight * state.renderScale);
-                bgCtx.fillStyle = '#ffffff';
-                bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
-                
-                canvas.width = state.bgCanvas.width;
-                canvas.height = state.bgCanvas.height;
-                dropzone.style.display = 'none';
-            }
-            
-            parseAndRender();
-            fitToScreen();
-            logMsg("Sample loaded.");
-        }
-
-        function formatJSON() {
+        function formatDataJSON() {
             try {
                 if (dataJsonArea.value.trim()) {
                     dataJsonArea.value = JSON.stringify(JSON.parse(dataJsonArea.value), null, 2);
                 }
+            } catch (e) { alert("Invalid JSON format."); }
+        }
+
+        function formatCoordJSON() {
+            try {
                 if (coordJsonArea.value.trim()) {
                     coordJsonArea.value = JSON.stringify(JSON.parse(coordJsonArea.value), null, 2);
                 }
-                logMsg("JSON formatted.");
-            } catch (e) {
-                logMsg("Cannot format invalid JSON.", true);
-            }
+            } catch (e) { alert("Invalid JSON format."); }
         }
 
         // --- Export Clean Image ---
         function exportPNG() {
-            if (!canvas.width || !canvas.height) return alert("Please load a template or sample first.");
+            if (!canvas.width || !canvas.height) return alert("Please load a template first.");
 
-            // Create final output canvas
             const offCanvas = document.createElement('canvas');
             offCanvas.width = canvas.width;
             offCanvas.height = canvas.height;
@@ -822,8 +837,10 @@
             const scaleY = offCanvas.height / state.refHeight;
             const scaleFont = (scaleX + scaleY) / 2;
 
-            // 2. Draw Text Fields (No Debug Markers)
+            // 2. Draw Fields (No Debug Markers)
             state.fields.forEach(f => {
+                if (!f.value || f.value.trim() === "") return;
+
                 offCtx.fillStyle = f.color || '#000000';
                 offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize * scaleFont}px Arial, sans-serif`;
                 offCtx.textAlign = f.align || 'left';
@@ -837,12 +854,12 @@
                 drawWrappedText(offCtx, f.value, drawX, drawY, maxW, lh);
             });
 
-            // 3. Trigger Download
+            // 3. Download
             const link = document.createElement('a');
             link.download = `filled_rc_${Date.now()}.png`;
             link.href = offCanvas.toDataURL('image/png');
             link.click();
-            logMsg("Exported high-res PNG successfully.");
+            logMsg("Exported clean PNG successfully.");
         }
 
         // Start
