@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RC Layout Renderer & Mapper</title>
+    <title>RC Layout Renderer & Mapper (PDF/Image)</title>
+    <!-- Load pdf.js from CDN for PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root {
             --bg-base: #121212;
@@ -35,8 +37,6 @@
         button.primary { background: var(--accent); color: white; border-color: var(--accent); }
         button.primary:hover { background: var(--accent-hover); }
         button.success { background: var(--success); color: white; border-color: var(--success); }
-        button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
-        button.danger:hover { background: var(--danger); color: white; }
         
         input[type="text"], input[type="number"], select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 6px; border-radius: 4px; outline: none; width: 100%; font-size: 0.85rem; }
         input:focus, select:focus, textarea:focus { border-color: var(--accent); }
@@ -53,11 +53,11 @@
         .scroll-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         
         /* Canvas Area */
-        .canvas-container { flex: 1; background: #000; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-        .canvas-wrapper { transform-origin: center center; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        .canvas-container { flex: 1; background: #000; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; }
+        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; }
         canvas { display: block; cursor: crosshair; }
         
-        .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.8); }
+        .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.85); }
         .dropzone.active { opacity: 1; pointer-events: all; border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
         
         /* Field List & Inspector */
@@ -79,12 +79,16 @@
     <header>
         <div class="logo">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            RC Renderer
+            RC Renderer (Pro)
         </div>
         <div class="controls">
             <div style="display:flex; gap:6px; align-items:center;">
-                <button onclick="document.getElementById('imageInput').click()">Upload Blank RC</button>
-                <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                <button onclick="document.getElementById('fileInput').click()">Upload RC (PDF/IMG)</button>
+                <input type="file" id="fileInput" accept="application/pdf, image/*" style="display: none;" onchange="handleFileUpload(event)">
+            </div>
+            <div id="pageControls" style="display:none; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <label>Page:</label>
+                <select id="pageSelect" onchange="changePDFPage(this.value)" style="width: 60px;"></select>
             </div>
             <div style="display:flex; gap:4px; border-left: 1px solid var(--border); padding-left: 15px;">
                 <button onclick="zoom(-0.1)">-</button>
@@ -95,7 +99,7 @@
                 <input type="checkbox" id="debugToggle" checked onchange="toggleDebug()">
                 <label for="debugToggle" style="text-transform: none; cursor: pointer;">Show Markers</label>
             </div>
-            <button class="primary" onclick="exportPNG()" style="margin-left: 10px;">Download Filled RC</button>
+            <button class="primary" onclick="exportPNG()" style="margin-left: 10px;">Download Filled PNG</button>
         </div>
     </header>
 
@@ -104,11 +108,11 @@
         <div class="sidebar">
             <div class="panel-header">JSON Configuration</div>
             <div class="scroll-area">
-                <textarea id="jsonArea" placeholder="Paste your JSON config or data here..."></textarea>
+                <textarea id="jsonArea" placeholder="Paste your JSON config here..."></textarea>
                 <div class="json-actions">
-                    <button onclick="loadJSON()" class="primary" style="flex:1;">Load / Parse JSON</button>
+                    <button onclick="loadJSON()" class="primary" style="flex:1;">Load / Parse</button>
                     <button onclick="formatJSON()">Format</button>
-                    <button onclick="loadPreset()">Preset</button>
+                    <button onclick="loadPreset()">Sample</button>
                 </div>
             </div>
         </div>
@@ -117,7 +121,7 @@
         <div class="canvas-container" id="canvasContainer">
             <div class="dropzone" id="dropzone">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-bottom: 10px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                <h2>Drag & Drop Blank RC Template</h2>
+                <h2>Drag & Drop Blank RC (PDF or Image)</h2>
             </div>
             <div class="canvas-wrapper" id="canvasWrapper">
                 <canvas id="mainCanvas"></canvas>
@@ -128,12 +132,12 @@
         <div class="sidebar right">
             <div class="panel-header">Mapped Fields</div>
             <div class="scroll-area" id="fieldList" style="max-height: 40%;">
-                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded. Upload image & load JSON.</div>
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded. Upload file & load JSON.</div>
             </div>
             
             <div class="panel-header" style="border-top: 1px solid var(--border);">Inspector</div>
             <div class="inspector">
-                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field on canvas or list to edit.</div>
+                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field to edit.</div>
                 
                 <div id="inspectorControls" style="display: none; flex-direction: column; gap: 10px;">
                     <div style="font-weight: bold; color: var(--accent); font-size: 0.9rem;" id="insKey">field_key</div>
@@ -169,16 +173,20 @@
     </div>
 
     <script>
+        // Initialize PDF.js Worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
         // --- State Management ---
         const state = {
-            img: null,
-            fields: [], // Internal normalized fields
+            baseImage: null, // HTMLCanvasElement or Image object representing current page
+            pdfDoc: null,    // Store PDF document for page switching
+            currentPage: 1,
+            fields: [], 
             activeFieldId: null,
             showDebug: true,
             zoom: 1,
             refWidth: null,
-            refHeight: null,
-            originalJSON: null // To maintain structure on export if needed
+            refHeight: null
         };
 
         // --- DOM Elements ---
@@ -191,15 +199,17 @@
         const inspectorEmpty = document.getElementById('inspectorEmpty');
         const inspectorControls = document.getElementById('inspectorControls');
         const jsonArea = document.getElementById('jsonArea');
+        const pageControls = document.getElementById('pageControls');
+        const pageSelect = document.getElementById('pageSelect');
 
         // --- Preset Data ---
         const PRESET_JSON = {
-            "metadata": { "refWidth": 1000, "refHeight": 1414 },
+            "metadata": { "refWidth": 612, "refHeight": 792 }, // Standard Letter/A4 pt size
             "coordinates": {
-                "regn_no": { "x": 800, "y": 250, "fontSize": 28, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" },
-                "owner_name": { "x": 200, "y": 400, "fontSize": 20, "fontWeight": "normal", "maxWidth": 400, "align": "left", "color": "#000000" },
-                "address": { "x": 200, "y": 450, "fontSize": 18, "fontWeight": "normal", "maxWidth": 500, "lineHeight": 24, "align": "left", "color": "#000000" },
-                "chassis_no": { "x": 700, "y": 400, "fontSize": 22, "fontWeight": "bold", "maxWidth": 250, "align": "center", "color": "#000000" }
+                "regn_no": { "x": 450, "y": 120, "fontSize": 16, "fontWeight": "bold", "maxWidth": 100, "align": "center", "color": "#000000" },
+                "owner_name": { "x": 100, "y": 220, "fontSize": 12, "fontWeight": "normal", "maxWidth": 250, "align": "left", "color": "#000000" },
+                "address": { "x": 100, "y": 250, "fontSize": 10, "fontWeight": "normal", "maxWidth": 300, "lineHeight": 14, "align": "left", "color": "#000000" },
+                "chassis_no": { "x": 400, "y": 220, "fontSize": 12, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" }
             },
             "data": {
                 "regn_no": "GJ05CX1400",
@@ -212,37 +222,96 @@
         // --- Initialization ---
         function init() {
             setupEvents();
+            canvas.width = 800;
+            canvas.height = 600;
+            render();
+        }
+
+        // --- File Handling (PDF & Images) ---
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.type === 'application/pdf') {
+                await handlePDF(file);
+            } else if (file.type.startsWith('image/')) {
+                await handleImage(file);
+            } else {
+                alert("Unsupported file type. Please upload PDF or Image.");
+            }
+            e.target.value = ''; // Reset input
+        }
+
+        async function handlePDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            try {
+                state.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                // Setup Page Controls
+                pageSelect.innerHTML = '';
+                for (let i = 1; i <= state.pdfDoc.numPages; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.innerText = i;
+                    pageSelect.appendChild(opt);
+                }
+                pageControls.style.display = 'flex';
+                
+                await renderPDFPage(1);
+                dropzone.style.display = 'none';
+            } catch (error) {
+                alert("Error loading PDF: " + error.message);
+            }
+        }
+
+        async function renderPDFPage(pageNum) {
+            if (!state.pdfDoc) return;
+            state.currentPage = pageNum;
+            pageSelect.value = pageNum;
+
+            const page = await state.pdfDoc.getPage(pageNum);
+            // Scale 3x for high resolution text rendering
+            const viewport = page.getViewport({ scale: 3.0 }); 
+            
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = viewport.width;
+            offCanvas.height = viewport.height;
+            const offCtx = offCanvas.getContext('2d');
+
+            await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
+            
+            state.baseImage = offCanvas;
             resizeCanvas();
         }
 
-        // --- Canvas & Image Handling ---
-        function resizeCanvas() {
-            if (state.img) {
-                canvas.width = state.img.naturalWidth;
-                canvas.height = state.img.naturalHeight;
-            } else {
-                canvas.width = 800;
-                canvas.height = 600;
-            }
-            render();
-            fitCanvas();
-        }
-
-        function handleImageUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        async function handleImage(file) {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    state.img = img;
+                    state.baseImage = img;
+                    state.pdfDoc = null; // Clear PDF
+                    pageControls.style.display = 'none';
                     dropzone.style.display = 'none';
                     resizeCanvas();
-                    if (state.fields.length > 0) applyScaling(); // Re-apply scaling for new image
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
+        }
+
+        function changePDFPage(pageNum) {
+            renderPDFPage(parseInt(pageNum));
+        }
+
+        function resizeCanvas() {
+            if (state.baseImage) {
+                canvas.width = state.baseImage.width || state.baseImage.naturalWidth;
+                canvas.height = state.baseImage.height || state.baseImage.naturalHeight;
+            }
+            render();
+            fitCanvas();
+            if (state.fields.length > 0) applyScaling();
         }
 
         // --- JSON Parsing & Normalization ---
@@ -252,18 +321,17 @@
             
             try {
                 const parsed = JSON.parse(raw);
-                state.originalJSON = parsed;
                 state.fields = [];
 
-                // Detect format
-                let refW = parsed.metadata?.refWidth || parsed.refWidth;
-                let refH = parsed.metadata?.refHeight || parsed.refHeight;
+                // Determine Reference Dimensions
+                let refW = parsed.metadata?.refWidth || parsed.refWidth || null;
+                let refH = parsed.metadata?.refHeight || parsed.refHeight || null;
                 
                 state.refWidth = refW;
                 state.refHeight = refH;
 
                 if (parsed.coordinates && parsed.data) {
-                    // Format B (Coordinates + Data separated)
+                    // Format B: Coordinates + Data
                     for (const [key, coord] of Object.entries(parsed.coordinates)) {
                         state.fields.push({
                             id: key,
@@ -273,7 +341,7 @@
                         });
                     }
                 } else if (Array.isArray(parsed)) {
-                    // Format A (Array of fields)
+                    // Format A: Array of fields
                     parsed.forEach((f, i) => {
                         state.fields.push({
                             id: f.key || `field_${i}`,
@@ -284,7 +352,7 @@
                         });
                     });
                 } else {
-                    throw new Error("Unknown JSON format. Expected Array or {coordinates, data} object.");
+                    throw new Error("Invalid format. Expected Array or {coordinates, data} object.");
                 }
 
                 applyScaling();
@@ -308,39 +376,34 @@
 
         function loadPreset() {
             jsonArea.value = JSON.stringify(PRESET_JSON, null, 2);
-            // Auto create a blank white canvas if no image
-            if (!state.img) {
+            if (!state.baseImage) {
+                // Create a dummy white image if no PDF/IMG is loaded
                 const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = 1000;
-                tempCanvas.height = 1414;
+                tempCanvas.width = 612 * 2; // Simulate 2x scale of ref
+                tempCanvas.height = 792 * 2;
                 const tempCtx = tempCanvas.getContext('2d');
                 tempCtx.fillStyle = '#ffffff';
-                tempCtx.fillRect(0, 0, 1000, 1414);
-                const img = new Image();
-                img.onload = () => {
-                    state.img = img;
-                    dropzone.style.display = 'none';
-                    resizeCanvas();
-                    loadJSON();
-                };
-                img.src = tempCanvas.toDataURL();
-            } else {
-                loadJSON();
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                state.baseImage = tempCanvas;
+                dropzone.style.display = 'none';
+                resizeCanvas();
             }
+            loadJSON();
         }
 
-        // --- Scaling Logic ---
+        // --- Coordinate Scaling Logic ---
         function applyScaling() {
-            if (!state.img || !state.refWidth || !state.refHeight) return;
+            if (!state.baseImage || !state.refWidth || !state.refHeight) return;
             
-            const scaleX = state.img.naturalWidth / state.refWidth;
-            const scaleY = state.img.naturalHeight / state.refHeight;
+            const imgW = state.baseImage.width || state.baseImage.naturalWidth;
+            const imgH = state.baseImage.height || state.baseImage.naturalHeight;
 
-            // Use average scale for fonts/lines to prevent weird stretching if aspect ratio changes slightly
-            const scaleFont = (scaleX + scaleY) / 2;
+            const scaleX = imgW / state.refWidth;
+            const scaleY = imgH / state.refHeight;
+            const scaleFont = (scaleX + scaleY) / 2; // Average scale for text
 
             state.fields.forEach(f => {
-                // Base values stored to allow re-scaling if image changes
+                // Preserve original values for re-scaling
                 if (!f._base) {
                     f._base = {
                         x: f.x, y: f.y, maxWidth: f.maxWidth,
@@ -348,6 +411,7 @@
                     };
                 }
 
+                // Apply scaled values
                 f.x = f._base.x * scaleX;
                 f.y = f._base.y * scaleY;
                 f.maxWidth = f._base.maxWidth * scaleX;
@@ -360,12 +424,10 @@
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Image
-            if (state.img) {
-                ctx.drawImage(state.img, 0, 0);
+            if (state.baseImage) {
+                ctx.drawImage(state.baseImage, 0, 0);
             }
 
-            // Draw Fields
             state.fields.forEach(f => {
                 ctx.fillStyle = f.color || '#000000';
                 ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
@@ -375,8 +437,8 @@
                 const maxW = f.maxWidth || canvas.width;
                 const lh = f.lineHeight || (f.fontSize * 1.4);
 
-                // Render actual value
-                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh, false);
+                // Render text
+                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh);
 
                 // Debug Overlays
                 if (state.showDebug) {
@@ -384,10 +446,10 @@
                     const totalHeight = lines.length * lh;
 
                     ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = Math.max(1, canvas.width / 1000); // Dynamic line width
                     ctx.setLineDash([5, 5]);
 
-                    // Bounding Box
+                    // Bounding Box calculation based on alignment
                     let bx = f.x;
                     if (f.align === 'center') bx = f.x - (maxW/2);
                     if (f.align === 'right') bx = f.x - maxW;
@@ -409,7 +471,7 @@
             });
         }
 
-        function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, isExport) {
+        function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
             const lines = getLines(ctx, text, maxWidth);
             lines.forEach((line, index) => {
                 ctx.fillText(line, x, y + (index * lineHeight));
@@ -440,7 +502,7 @@
             return allLines;
         }
 
-        // --- UI Interactivity (Field List & Inspector) ---
+        // --- UI Interactivity ---
         function renderFieldList() {
             fieldListEl.innerHTML = '';
             if (state.fields.length === 0) {
@@ -491,8 +553,6 @@
 
             if (['x', 'y', 'maxWidth', 'fontSize', 'lineHeight'].includes(prop)) {
                 field[prop] = parseFloat(val) || 0;
-                // Update base so it doesn't snap back on re-scale
-                if (field._base) field._base[prop] = field[prop] / (prop === 'fontSize' || prop === 'lineHeight' ? 1 : 1); 
             } else {
                 field[prop] = val;
             }
@@ -500,11 +560,12 @@
         }
 
         function copyUpdatedJSON() {
-            // Reconstruct JSON
+            if (!state.baseImage) return alert("Load a file first.");
+            
             const output = {
                 metadata: {
-                    refWidth: state.img ? state.img.naturalWidth : 1000,
-                    refHeight: state.img ? state.img.naturalHeight : 1414
+                    refWidth: state.baseImage.width || state.baseImage.naturalWidth,
+                    refHeight: state.baseImage.height || state.baseImage.naturalHeight
                 },
                 coordinates: {},
                 data: {}
@@ -542,10 +603,12 @@
             // Click to select field
             canvas.addEventListener('mousedown', (e) => {
                 const rect = canvas.getBoundingClientRect();
-                const clickX = (e.clientX - rect.left) / state.zoom;
-                const clickY = (e.clientY - rect.top) / state.zoom;
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const clickX = (e.clientX - rect.left) * scaleX;
+                const clickY = (e.clientY - rect.top) * scaleY;
 
-                // Reverse iterate to get top-most field
+                // Reverse iterate to get topmost field
                 for (let i = state.fields.length - 1; i >= 0; i--) {
                     const f = state.fields[i];
                     const lh = f.lineHeight || (f.fontSize * 1.4);
@@ -562,7 +625,7 @@
                         return;
                     }
                 }
-                // Deselect if clicked empty space
+                // Deselect
                 state.activeFieldId = null;
                 updateInspector();
                 render();
@@ -571,7 +634,7 @@
 
             // Arrow keys for nudging
             window.addEventListener('keydown', (e) => {
-                if (!state.activeFieldId) return;
+                if (!state.activeFieldId || ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
                 const f = state.fields.find(x => x.id === state.activeFieldId);
                 if (!f) return;
 
@@ -590,26 +653,26 @@
                 }
             });
 
-            // Drag & Drop Image
+            // Drag & Drop
             dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('active'); });
             dropzone.addEventListener('dragleave', () => dropzone.classList.remove('active'));
             dropzone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropzone.classList.remove('active');
                 if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    handleImageUpload({ target: { files: e.dataTransfer.files } });
+                    handleFileUpload({ target: { files: e.dataTransfer.files } });
                 }
             });
         }
 
         // --- Helpers ---
         function zoom(delta) {
-            state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 5));
+            state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 10));
             wrapper.style.transform = `scale(${state.zoom})`;
         }
 
         function fitCanvas() {
-            if (!state.img) return;
+            if (!state.baseImage) return;
             const containerW = container.clientWidth - 40;
             const containerH = container.clientHeight - 40;
             const scaleX = containerW / canvas.width;
@@ -625,18 +688,18 @@
 
         // --- Export Clean Image ---
         function exportPNG() {
-            if (!state.img) return alert("Please upload a blank RC template first.");
+            if (!state.baseImage) return alert("Please upload a template first.");
 
-            // Create an offscreen canvas at native resolution
+            // Create offscreen canvas at true resolution
             const offCanvas = document.createElement('canvas');
-            offCanvas.width = state.img.naturalWidth;
-            offCanvas.height = state.img.naturalHeight;
+            offCanvas.width = canvas.width;
+            offCanvas.height = canvas.height;
             const offCtx = offCanvas.getContext('2d');
 
-            // 1. Draw Background
-            offCtx.drawImage(state.img, 0, 0);
+            // Draw Background
+            offCtx.drawImage(state.baseImage, 0, 0);
 
-            // 2. Draw Fields (Without Debug)
+            // Draw Fields
             state.fields.forEach(f => {
                 offCtx.fillStyle = f.color || '#000000';
                 offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
@@ -646,10 +709,10 @@
                 const maxW = f.maxWidth || offCanvas.width;
                 const lh = f.lineHeight || (f.fontSize * 1.4);
 
-                drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh, true);
+                drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh);
             });
 
-            // 3. Trigger Download
+            // Download
             const link = document.createElement('a');
             link.download = `filled_rc_${Date.now()}.png`;
             link.href = offCanvas.toDataURL('image/png');
