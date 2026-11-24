@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 RC Renderer & Mapper (PDF/Image)</title>
+    <title>A4 RC Renderer Pro (PDF/Image)</title>
     <!-- PDF.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
@@ -32,7 +32,7 @@
         .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         
         /* Buttons & Inputs */
-        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 5px; }
         button:hover { background: var(--border); }
         button.primary { background: var(--accent); color: white; border-color: var(--accent); }
         button.primary:hover { background: var(--accent-hover); }
@@ -54,7 +54,7 @@
         
         /* Canvas Area */
         .canvas-container { flex: 1; background: #000; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; background: #fff; }
+        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; background: #fff; transition: transform 0.1s ease-out; }
         canvas { display: block; cursor: crosshair; }
         
         .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.85); }
@@ -70,7 +70,7 @@
         .prop-row > div { flex: 1; }
 
         /* Status Log */
-        .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); padding: 5px 10px; font-size: 0.75rem; font-family: monospace; color: var(--success); z-index: 10; pointer-events: none; border-top: 1px solid var(--border);}
+        .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.85); padding: 5px 10px; font-size: 0.75rem; font-family: monospace; color: var(--success); z-index: 10; pointer-events: none; border-top: 1px solid var(--border);}
     </style>
 </head>
 <body>
@@ -78,7 +78,7 @@
     <header>
         <div class="logo">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            RC Renderer (A4)
+            RC Renderer Pro
         </div>
         <div class="controls">
             <div style="display:flex; gap:6px; align-items:center;">
@@ -86,17 +86,17 @@
                 <input type="file" id="fileInput" accept="application/pdf, image/*" style="display: none;" onchange="handleFileUpload(event)">
             </div>
             <div id="pdfControls" style="display:none; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
-                <select id="pageSelect" onchange="changePDFPage(this.value)" style="width: 80px;"></select>
+                <select id="pageSelect" onchange="changePDFPage(this.value)" style="width: 100px;"></select>
             </div>
             <div style="display:flex; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
-                <select id="orientationSelect" onchange="changeOrientation()" style="width: 100px;">
+                <select id="orientationSelect" onchange="changeOrientation()" style="width: 110px;">
                     <option value="portrait">Portrait</option>
                     <option value="landscape">Landscape</option>
                 </select>
             </div>
             <div style="display:flex; gap:4px; border-left: 1px solid var(--border); padding-left: 15px;">
                 <button onclick="zoom(-0.1)">-</button>
-                <button onclick="fitCanvas()">Fit</button>
+                <button onclick="fitToScreen()">Fit</button>
                 <button onclick="zoom(0.1)">+</button>
             </div>
             <div style="display:flex; align-items:center; gap: 6px; border-left: 1px solid var(--border); padding-left: 15px;">
@@ -140,7 +140,7 @@
             <div class="canvas-wrapper" id="canvasWrapper">
                 <canvas id="mainCanvas"></canvas>
             </div>
-            <div class="status-bar" id="statusLog">Ready.</div>
+            <div class="status-bar" id="statusLog">Ready. Please upload a blank RC template.</div>
         </div>
 
         <!-- Right Sidebar: Fields & Fine-Tuning -->
@@ -152,7 +152,7 @@
             
             <div class="panel-header" style="border-top: 1px solid var(--border);">Inspector</div>
             <div class="inspector">
-                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field to edit.</div>
+                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field on the canvas or list to edit.</div>
                 
                 <div id="inspectorControls" style="display: none; flex-direction: column; gap: 10px;">
                     <div style="font-weight: bold; color: var(--accent); font-size: 0.9rem;" id="insKey">field_key</div>
@@ -189,12 +189,12 @@
     </div>
 
     <script>
-        // Initialize PDF.js Worker
+        // Configure PDF.js Worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         // --- State Management ---
         const state = {
-            baseImage: null, 
+            bgCanvas: document.createElement('canvas'), // Offscreen buffer for PDF/Image
             pdfDoc: null,    
             currentPage: 1,
             fields: [], 
@@ -203,12 +203,14 @@
             zoom: 1,
             refWidth: 595.28,  // A4 Points Portrait
             refHeight: 841.89, // A4 Points Portrait
-            renderScale: 3      // High-res rendering scale for PDFs
+            renderScale: 2.5   // High-res scale for PDF rendering
         };
 
         // --- DOM Elements ---
         const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d');
+        const bgCtx = state.bgCanvas.getContext('2d');
+        
         const wrapper = document.getElementById('canvasWrapper');
         const dropzone = document.getElementById('dropzone');
         const container = document.getElementById('canvasContainer');
@@ -221,7 +223,7 @@
         const pageSelect = document.getElementById('pageSelect');
         const statusLog = document.getElementById('statusLog');
 
-        // --- Presets ---
+        // --- Sample Presets ---
         const PRESET_DATA = {
             "regn_no": "GJ05CX1400",
             "owner_name": "SACHIN TENDULKAR",
@@ -255,12 +257,70 @@
         // --- Initialization ---
         function init() {
             setupEvents();
-            canvas.width = state.refWidth * 2; // Default dummy canvas size
+            // Initialize main canvas with A4 dummy size
+            canvas.width = state.refWidth * 2;
             canvas.height = state.refHeight * 2;
-            render();
+            renderAll();
         }
 
-        // --- File Handling ---
+        // --- Core Rendering Engine ---
+        function renderAll() {
+            // 1. Fill Main Canvas with White
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Draw Background (PDF/Image) from Offscreen Buffer
+            if (state.bgCanvas.width > 0 && state.bgCanvas.height > 0) {
+                ctx.drawImage(state.bgCanvas, 0, 0);
+            }
+
+            // 3. Draw Text Fields
+            state.fields.forEach(f => {
+                ctx.fillStyle = f.color || '#000000';
+                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
+                ctx.textAlign = f.align || 'left';
+                ctx.textBaseline = 'top';
+
+                const maxW = f.maxWidth || canvas.width;
+                const lh = f.lineHeight || (f.fontSize * 1.4);
+
+                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh);
+            });
+
+            // 4. Draw Debug Markers
+            if (state.showDebug) {
+                state.fields.forEach(f => {
+                    const maxW = f.maxWidth || canvas.width;
+                    const lh = f.lineHeight || (f.fontSize * 1.4);
+                    const lines = getLines(ctx, f.value, maxW);
+                    const totalHeight = lines.length * lh;
+
+                    ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.lineWidth = Math.max(1, canvas.width / 800); 
+                    ctx.setLineDash([5, 5]);
+
+                    let bx = f.x;
+                    if (f.align === 'center') bx = f.x - (maxW/2);
+                    if (f.align === 'right') bx = f.x - maxW;
+
+                    ctx.strokeRect(bx, f.y, maxW, totalHeight);
+                    ctx.setLineDash([]);
+
+                    // Crosshair
+                    ctx.beginPath();
+                    ctx.moveTo(f.x - 10, f.y); ctx.lineTo(f.x + 10, f.y);
+                    ctx.moveTo(f.x, f.y - 10); ctx.lineTo(f.x, f.y + 10);
+                    ctx.stroke();
+
+                    // Label
+                    ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.font = `${Math.max(10, canvas.width/80)}px monospace`;
+                    ctx.fillText(f.key, bx, f.y - 20);
+                });
+            }
+        }
+
+        // --- File Handling (PDF & Images) ---
         async function handleFileUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -308,25 +368,28 @@
             const page = await state.pdfDoc.getPage(pageNum);
             const viewport = page.getViewport({ scale: state.renderScale }); 
             
-            // Create offscreen canvas to hold the PDF image
-            const offCanvas = document.createElement('canvas');
-            offCanvas.width = viewport.width;
-            offCanvas.height = viewport.height;
-            const offCtx = offCanvas.getContext('2d');
+            // Set offscreen buffer size
+            state.bgCanvas.width = viewport.width;
+            state.bgCanvas.height = viewport.height;
 
-            // Fill white background (PDFs are transparent by default)
-            offCtx.fillStyle = '#ffffff';
-            offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+            // 🔥 FIX: Fill white background BEFORE rendering PDF to prevent black screen
+            bgCtx.fillStyle = '#ffffff';
+            bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
 
             const renderContext = {
-                canvasContext: offCtx,
+                canvasContext: bgCtx,
                 viewport: viewport
             };
 
             await page.render(renderContext).promise;
             
-            state.baseImage = offCanvas;
-            resizeCanvas();
+            // Set main canvas size to match
+            canvas.width = state.bgCanvas.width;
+            canvas.height = state.bgCanvas.height;
+
+            applyScaling();
+            fitToScreen();
+            renderAll();
         }
 
         async function handleImage(file) {
@@ -335,11 +398,22 @@
                 reader.onload = (event) => {
                     const img = new Image();
                     img.onload = () => {
-                        state.baseImage = img;
+                        state.bgCanvas.width = img.width;
+                        state.bgCanvas.height = img.height;
+                        bgCtx.fillStyle = '#ffffff';
+                        bgCtx.fillRect(0, 0, img.width, img.height);
+                        bgCtx.drawImage(img, 0, 0);
+
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+
                         state.pdfDoc = null; 
                         pdfControls.style.display = 'none';
                         dropzone.style.display = 'none';
-                        resizeCanvas();
+                        
+                        applyScaling();
+                        fitToScreen();
+                        renderAll();
                         logMsg("Image loaded successfully.");
                         resolve();
                     };
@@ -364,7 +438,8 @@
                 state.refWidth = 841.89;
                 state.refHeight = 595.28;
             }
-            // Update coord JSON box default dimensions
+            
+            // Update JSON box dimensions
             try {
                 const parsed = JSON.parse(coordJsonArea.value);
                 parsed.refWidth = state.refWidth;
@@ -374,19 +449,6 @@
             } catch (e) { }
             
             parseAndRender();
-        }
-
-        function resizeCanvas() {
-            if (state.baseImage) {
-                canvas.width = state.baseImage.width || state.baseImage.naturalWidth;
-                canvas.height = state.baseImage.height || state.baseImage.naturalHeight;
-            } else {
-                canvas.width = state.refWidth * 2;
-                canvas.height = state.refHeight * 2;
-            }
-            render();
-            fitCanvas();
-            if (state.fields.length > 0) applyScaling();
         }
 
         // --- JSON Parsing & Scaling ---
@@ -400,14 +462,13 @@
                 const dataObj = dataStr ? JSON.parse(dataStr) : {};
                 const coordObj = JSON.parse(coordStr);
 
-                // Update state reference dimensions based on JSON
                 if (coordObj.refWidth && coordObj.refHeight) {
                     state.refWidth = coordObj.refWidth;
                     state.refHeight = coordObj.refHeight;
                 }
 
                 state.fields = [];
-                const fieldMap = coordObj.fields || coordObj.coordinates || coordObj; // Support different formats
+                const fieldMap = coordObj.fields || coordObj.coordinates || coordObj; 
 
                 for (const [key, config] of Object.entries(fieldMap)) {
                     if (key === 'pageSize' || key === 'refWidth' || key === 'refHeight') continue;
@@ -422,28 +483,25 @@
 
                 applyScaling();
                 renderFieldList();
-                render();
-                logMsg(`Successfully parsed and rendered ${state.fields.length} fields.`);
+                renderAll();
+                logMsg(`Rendered ${state.fields.length} fields.`);
                 
             } catch (err) {
                 logMsg(`JSON Error: ${err.message}`, true);
-                // Don't alert on every keystroke, just log it
             }
         }
 
         function applyScaling() {
-            if (!state.baseImage) return;
+            if (!canvas.width) return;
             
             const imgW = canvas.width;
             const imgH = canvas.height;
 
-            // Calculate scale factors
             const scaleX = imgW / state.refWidth;
             const scaleY = imgH / state.refHeight;
             const scaleFont = (scaleX + scaleY) / 2; 
 
             state.fields.forEach(f => {
-                // Preserve base values for re-scaling
                 if (!f._base) {
                     f._base = {
                         x: f.x, y: f.y, maxWidth: f.maxWidth,
@@ -459,55 +517,7 @@
             });
         }
 
-        // --- Rendering Engine ---
-        function render() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (state.baseImage) {
-                ctx.drawImage(state.baseImage, 0, 0);
-            } else {
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-
-            state.fields.forEach(f => {
-                ctx.fillStyle = f.color || '#000000';
-                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
-                ctx.textAlign = f.align || 'left';
-                ctx.textBaseline = 'top';
-
-                const maxW = f.maxWidth || canvas.width;
-                const lh = f.lineHeight || (f.fontSize * 1.4);
-
-                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh);
-
-                if (state.showDebug) {
-                    const lines = getLines(ctx, f.value, maxW);
-                    const totalHeight = lines.length * lh;
-
-                    ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
-                    ctx.lineWidth = Math.max(1, canvas.width / 800); 
-                    ctx.setLineDash([5, 5]);
-
-                    let bx = f.x;
-                    if (f.align === 'center') bx = f.x - (maxW/2);
-                    if (f.align === 'right') bx = f.x - maxW;
-
-                    ctx.strokeRect(bx, f.y, maxW, totalHeight);
-                    ctx.setLineDash([]);
-
-                    ctx.beginPath();
-                    ctx.moveTo(f.x - 10, f.y); ctx.lineTo(f.x + 10, f.y);
-                    ctx.moveTo(f.x, f.y - 10); ctx.lineTo(f.x, f.y + 10);
-                    ctx.stroke();
-
-                    ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
-                    ctx.font = `${Math.max(10, canvas.width/80)}px monospace`;
-                    ctx.fillText(f.key, bx, f.y - 20);
-                }
-            });
-        }
-
+        // --- Text Wrapping Logic ---
         function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
             const lines = getLines(ctx, text, maxWidth);
             lines.forEach((line, index) => {
@@ -559,7 +569,7 @@
         function selectField(id) {
             state.activeFieldId = id;
             renderFieldList();
-            render();
+            renderAll(); // Updates the red highlight box
             updateInspector();
         }
 
@@ -593,7 +603,7 @@
             } else {
                 field[prop] = val;
             }
-            render();
+            renderAll(); // Live update on canvas
         }
 
         function copyCoordinates() {
@@ -604,7 +614,6 @@
                 fields: {}
             };
 
-            // Convert back to reference space
             const imgW = canvas.width;
             const imgH = canvas.height;
             const scaleX = imgW / state.refWidth;
@@ -633,7 +642,7 @@
 
         // --- Canvas Interactions ---
         function setupEvents() {
-            // Auto-parse on input
+            // Auto-parse JSON
             let timeout = null;
             const debounceParse = () => {
                 clearTimeout(timeout);
@@ -642,7 +651,7 @@
             dataJsonArea.addEventListener('input', debounceParse);
             coordJsonArea.addEventListener('input', debounceParse);
 
-            // Zoom
+            // Zoom via Ctrl+Scroll
             container.addEventListener('wheel', (e) => {
                 if (e.ctrlKey) {
                     e.preventDefault();
@@ -650,7 +659,7 @@
                 }
             });
 
-            // Click to select
+            // Click to Select Field
             canvas.addEventListener('mousedown', (e) => {
                 if (state.fields.length === 0) return;
                 const rect = canvas.getBoundingClientRect();
@@ -659,6 +668,7 @@
                 const clickX = (e.clientX - rect.left) * scaleX;
                 const clickY = (e.clientY - rect.top) * scaleY;
 
+                // Reverse iterate to find top-most field
                 for (let i = state.fields.length - 1; i >= 0; i--) {
                     const f = state.fields[i];
                     const lh = f.lineHeight || (f.fontSize * 1.4);
@@ -675,13 +685,14 @@
                         return;
                     }
                 }
+                // Click empty space: deselect
                 state.activeFieldId = null;
                 updateInspector();
-                render();
+                renderAll();
                 renderFieldList();
             });
 
-            // Arrow keys
+            // Keyboard Nudge
             window.addEventListener('keydown', (e) => {
                 if (!state.activeFieldId || ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
                 const f = state.fields.find(x => x.id === state.activeFieldId);
@@ -698,11 +709,11 @@
                 if (changed) {
                     e.preventDefault();
                     updateInspector();
-                    render();
+                    renderAll();
                 }
             });
 
-            // Drag & Drop
+            // Drag & Drop Zone
             dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('active'); });
             dropzone.addEventListener('dragleave', () => dropzone.classList.remove('active'));
             dropzone.addEventListener('drop', (e) => {
@@ -720,38 +731,46 @@
             wrapper.style.transform = `scale(${state.zoom})`;
         }
 
-        function fitCanvas() {
+        function fitToScreen() {
             if (!canvas.width || !canvas.height) return;
-            const containerW = container.clientWidth - 60;
-            const containerH = container.clientHeight - 60;
-            const scaleX = containerW / canvas.width;
-            const scaleY = containerH / canvas.height;
-            state.zoom = Math.min(scaleX, scaleY, 1);
-            wrapper.style.transform = `scale(${state.zoom})`;
+            // Wait for layout to settle
+            requestAnimationFrame(() => {
+                const containerW = container.clientWidth - 60;
+                const containerH = container.clientHeight - 60;
+                const scaleX = containerW / canvas.width;
+                const scaleY = containerH / canvas.height;
+                state.zoom = Math.min(scaleX, scaleY, 1);
+                wrapper.style.transform = `scale(${state.zoom})`;
+                
+                // Center it
+                wrapper.style.margin = 'auto';
+            });
         }
 
         function toggleDebug() {
             state.showDebug = document.getElementById('debugToggle').checked;
-            render();
+            renderAll();
         }
 
         function loadPreset() {
             dataJsonArea.value = JSON.stringify(PRESET_DATA, null, 2);
             coordJsonArea.value = JSON.stringify(PRESET_COORD, null, 2);
             
-            if (!state.baseImage) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = state.refWidth * 2; 
-                tempCanvas.height = state.refHeight * 2;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.fillStyle = '#ffffff';
-                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-                state.baseImage = tempCanvas;
+            if (!state.bgCanvas.width || !state.bgCanvas.height || state.bgCanvas.width === 0) {
+                // Create blank white A4 canvas if no PDF is loaded
+                state.bgCanvas.width = state.refWidth * state.renderScale; 
+                state.bgCanvas.height = state.refHeight * state.renderScale;
+                bgCtx.fillStyle = '#ffffff';
+                bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
+                
+                canvas.width = state.bgCanvas.width;
+                canvas.height = state.bgCanvas.height;
                 dropzone.style.display = 'none';
-                resizeCanvas();
             }
+            
             parseAndRender();
-            logMsg("Preset loaded.");
+            fitToScreen();
+            logMsg("Sample loaded.");
         }
 
         function formatJSON() {
@@ -768,19 +787,24 @@
             }
         }
 
-        // --- Export ---
+        // --- Export Clean Image ---
         function exportPNG() {
-            if (!state.baseImage) return alert("Please load a template first.");
+            if (!canvas.width || !canvas.height) return alert("Please load a template or sample first.");
 
+            // Create final output canvas
             const offCanvas = document.createElement('canvas');
             offCanvas.width = canvas.width;
             offCanvas.height = canvas.height;
             const offCtx = offCanvas.getContext('2d');
 
+            // 1. Draw Background
             offCtx.fillStyle = '#ffffff';
             offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
-            offCtx.drawImage(state.baseImage, 0, 0);
+            if (state.bgCanvas.width > 0) {
+                offCtx.drawImage(state.bgCanvas, 0, 0);
+            }
 
+            // 2. Draw Text Fields (No Debug Markers)
             state.fields.forEach(f => {
                 offCtx.fillStyle = f.color || '#000000';
                 offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
@@ -793,6 +817,7 @@
                 drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh);
             });
 
+            // 3. Trigger Download
             const link = document.createElement('a');
             link.download = `filled_rc_${Date.now()}.png`;
             link.href = offCanvas.toDataURL('image/png');
