@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 RC Renderer Pro (PDF/Image)</title>
+    <title>A4 RC Renderer & Mapper (PDF/Image)</title>
     <!-- PDF.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
@@ -27,7 +27,7 @@
         body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
         /* Header */
-        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-wrap: wrap; gap: 10px; }
+        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-wrap: wrap; gap: 10px; flex-shrink: 0; }
         .logo { font-weight: 600; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 8px; }
         .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         
@@ -45,16 +45,33 @@
         .workspace { display: flex; flex: 1; overflow: hidden; }
         
         /* Sidebars */
-        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); flex-shrink: 0; }
+        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); flex-shrink: 0; z-index: 5; }
         .sidebar.right { border-right: none; border-left: 1px solid var(--border); width: 320px; }
         
-        .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; background: #181818; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; background: #181818; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); flex-shrink: 0; }
         
         .scroll-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
         
         /* Canvas Area */
-        .canvas-container { flex: 1; background: #000; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; background: #fff; transition: transform 0.1s ease-out; }
+        .canvas-container { 
+            flex: 1; 
+            background: #000; 
+            position: relative; 
+            min-width: 0; 
+            min-height: 0;
+            overflow: auto; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start; 
+            padding: 24px; 
+        }
+        
+        .canvas-wrapper { 
+            margin: auto; /* Centers horizontally and vertically when smaller, allows scroll when larger */
+            box-shadow: 0 0 20px rgba(0,0,0,0.8); 
+            background: #fff;
+        }
+        
         canvas { display: block; cursor: crosshair; }
         
         .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.85); }
@@ -65,7 +82,7 @@
         .field-item:hover { border-color: var(--accent); }
         .field-item.active { background: var(--debug-bg); border-color: var(--accent); }
         
-        .inspector { background: #181818; border-top: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+        .inspector { background: #181818; border-top: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; max-height: 50%; overflow-y: auto; }
         .prop-row { display: flex; gap: 8px; align-items: flex-end; }
         .prop-row > div { flex: 1; }
 
@@ -258,8 +275,16 @@
         function init() {
             setupEvents();
             // Initialize main canvas with A4 dummy size
-            canvas.width = state.refWidth * 2;
-            canvas.height = state.refHeight * 2;
+            canvas.width = Math.round(state.refWidth * state.renderScale);
+            canvas.height = Math.round(state.refHeight * state.renderScale);
+            state.bgCanvas.width = canvas.width;
+            state.bgCanvas.height = canvas.height;
+            
+            // Fill bg white
+            bgCtx.fillStyle = '#ffffff';
+            bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
+
+            fitToScreen();
             renderAll();
         }
 
@@ -269,29 +294,41 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 2. Draw Background (PDF/Image) from Offscreen Buffer
-            if (state.bgCanvas.width > 0 && state.bgCanvas.height > 0) {
+            // 2. Draw Background from Offscreen Buffer
+            if (state.bgCanvas.width > 0) {
                 ctx.drawImage(state.bgCanvas, 0, 0);
             }
 
-            // 3. Draw Text Fields
+            // Calculate scale factors from A4 reference to high-res canvas
+            const scaleX = canvas.width / state.refWidth;
+            const scaleY = canvas.height / state.refHeight;
+            const scaleFont = (scaleX + scaleY) / 2;
+
+            // 3. Draw Text Fields (Store base coords in A4 space, draw in canvas space)
             state.fields.forEach(f => {
                 ctx.fillStyle = f.color || '#000000';
-                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
+                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize * scaleFont}px Arial, sans-serif`;
                 ctx.textAlign = f.align || 'left';
                 ctx.textBaseline = 'top';
 
-                const maxW = f.maxWidth || canvas.width;
-                const lh = f.lineHeight || (f.fontSize * 1.4);
+                const drawX = f.x * scaleX;
+                const drawY = f.y * scaleY;
+                const maxW = (f.maxWidth || state.refWidth) * scaleX;
+                const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
 
-                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh);
+                drawWrappedText(ctx, f.value, drawX, drawY, maxW, lh);
             });
 
             // 4. Draw Debug Markers
             if (state.showDebug) {
                 state.fields.forEach(f => {
-                    const maxW = f.maxWidth || canvas.width;
-                    const lh = f.lineHeight || (f.fontSize * 1.4);
+                    const drawX = f.x * scaleX;
+                    const drawY = f.y * scaleY;
+                    const maxW = (f.maxWidth || state.refWidth) * scaleX;
+                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
+                    const fSize = f.fontSize * scaleFont;
+
+                    ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`; // Needed for measureText
                     const lines = getLines(ctx, f.value, maxW);
                     const totalHeight = lines.length * lh;
 
@@ -299,23 +336,23 @@
                     ctx.lineWidth = Math.max(1, canvas.width / 800); 
                     ctx.setLineDash([5, 5]);
 
-                    let bx = f.x;
-                    if (f.align === 'center') bx = f.x - (maxW/2);
-                    if (f.align === 'right') bx = f.x - maxW;
+                    let bx = drawX;
+                    if (f.align === 'center') bx = drawX - (maxW/2);
+                    if (f.align === 'right') bx = drawX - maxW;
 
-                    ctx.strokeRect(bx, f.y, maxW, totalHeight);
+                    ctx.strokeRect(bx, drawY, maxW, totalHeight);
                     ctx.setLineDash([]);
 
                     // Crosshair
                     ctx.beginPath();
-                    ctx.moveTo(f.x - 10, f.y); ctx.lineTo(f.x + 10, f.y);
-                    ctx.moveTo(f.x, f.y - 10); ctx.lineTo(f.x, f.y + 10);
+                    ctx.moveTo(drawX - 10, drawY); ctx.lineTo(drawX + 10, drawY);
+                    ctx.moveTo(drawX, drawY - 10); ctx.lineTo(drawX, drawY + 10);
                     ctx.stroke();
 
                     // Label
                     ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
                     ctx.font = `${Math.max(10, canvas.width/80)}px monospace`;
-                    ctx.fillText(f.key, bx, f.y - 20);
+                    ctx.fillText(f.key, bx, drawY - 20);
                 });
             }
         }
@@ -369,8 +406,8 @@
             const viewport = page.getViewport({ scale: state.renderScale }); 
             
             // Set offscreen buffer size
-            state.bgCanvas.width = viewport.width;
-            state.bgCanvas.height = viewport.height;
+            state.bgCanvas.width = Math.round(viewport.width);
+            state.bgCanvas.height = Math.round(viewport.height);
 
             // 🔥 FIX: Fill white background BEFORE rendering PDF to prevent black screen
             bgCtx.fillStyle = '#ffffff';
@@ -387,7 +424,6 @@
             canvas.width = state.bgCanvas.width;
             canvas.height = state.bgCanvas.height;
 
-            applyScaling();
             fitToScreen();
             renderAll();
         }
@@ -411,7 +447,6 @@
                         pdfControls.style.display = 'none';
                         dropzone.style.display = 'none';
                         
-                        applyScaling();
                         fitToScreen();
                         renderAll();
                         logMsg("Image loaded successfully.");
@@ -481,7 +516,6 @@
                     });
                 }
 
-                applyScaling();
                 renderFieldList();
                 renderAll();
                 logMsg(`Rendered ${state.fields.length} fields.`);
@@ -489,32 +523,6 @@
             } catch (err) {
                 logMsg(`JSON Error: ${err.message}`, true);
             }
-        }
-
-        function applyScaling() {
-            if (!canvas.width) return;
-            
-            const imgW = canvas.width;
-            const imgH = canvas.height;
-
-            const scaleX = imgW / state.refWidth;
-            const scaleY = imgH / state.refHeight;
-            const scaleFont = (scaleX + scaleY) / 2; 
-
-            state.fields.forEach(f => {
-                if (!f._base) {
-                    f._base = {
-                        x: f.x, y: f.y, maxWidth: f.maxWidth,
-                        fontSize: f.fontSize, lineHeight: f.lineHeight || (f.fontSize * 1.4)
-                    };
-                }
-
-                f.x = f._base.x * scaleX;
-                f.y = f._base.y * scaleY;
-                f.maxWidth = f._base.maxWidth * scaleX;
-                f.fontSize = f._base.fontSize * scaleFont;
-                f.lineHeight = f._base.lineHeight * scaleFont;
-            });
         }
 
         // --- Text Wrapping Logic ---
@@ -569,7 +577,7 @@
         function selectField(id) {
             state.activeFieldId = id;
             renderFieldList();
-            renderAll(); // Updates the red highlight box
+            renderAll();
             updateInspector();
         }
 
@@ -588,7 +596,7 @@
             document.getElementById('insY').value = field.y.toFixed(1);
             document.getElementById('insMaxWidth').value = field.maxWidth.toFixed(1);
             document.getElementById('insFontSize').value = field.fontSize.toFixed(1);
-            document.getElementById('insLineHeight').value = field.lineHeight.toFixed(1);
+            document.getElementById('insLineHeight').value = (field.lineHeight || (field.fontSize * 1.4)).toFixed(1);
             document.getElementById('insFontWeight').value = field.fontWeight || 'normal';
             document.getElementById('insAlign').value = field.align || 'left';
             document.getElementById('insColor').value = field.color || '#000000';
@@ -603,7 +611,7 @@
             } else {
                 field[prop] = val;
             }
-            renderAll(); // Live update on canvas
+            renderAll();
         }
 
         function copyCoordinates() {
@@ -614,19 +622,13 @@
                 fields: {}
             };
 
-            const imgW = canvas.width;
-            const imgH = canvas.height;
-            const scaleX = imgW / state.refWidth;
-            const scaleY = imgH / state.refHeight;
-            const scaleFont = (scaleX + scaleY) / 2; 
-
             state.fields.forEach(f => {
                 output.fields[f.key] = {
-                    x: parseFloat((f.x / scaleX).toFixed(2)),
-                    y: parseFloat((f.y / scaleY).toFixed(2)),
-                    maxWidth: parseFloat((f.maxWidth / scaleX).toFixed(2)),
-                    fontSize: parseFloat((f.fontSize / scaleFont).toFixed(2)),
-                    lineHeight: parseFloat((f.lineHeight / scaleFont).toFixed(2)),
+                    x: parseFloat(f.x.toFixed(2)),
+                    y: parseFloat(f.y.toFixed(2)),
+                    maxWidth: parseFloat(f.maxWidth.toFixed(2)),
+                    fontSize: parseFloat(f.fontSize.toFixed(2)),
+                    lineHeight: parseFloat((f.lineHeight || (f.fontSize * 1.4)).toFixed(2)),
                     fontWeight: f.fontWeight,
                     align: f.align,
                     color: f.color
@@ -663,24 +665,33 @@
             canvas.addEventListener('mousedown', (e) => {
                 if (state.fields.length === 0) return;
                 const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const clickX = (e.clientX - rect.left) * scaleX;
-                const clickY = (e.clientY - rect.top) * scaleY;
+                // True base canvas coordinates
+                const baseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+                const baseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+                const scaleX = canvas.width / state.refWidth;
+                const scaleY = canvas.height / state.refHeight;
+                const scaleFont = (scaleX + scaleY) / 2;
 
                 // Reverse iterate to find top-most field
                 for (let i = state.fields.length - 1; i >= 0; i--) {
                     const f = state.fields[i];
-                    const lh = f.lineHeight || (f.fontSize * 1.4);
-                    const lines = getLines(ctx, f.value, f.maxWidth || canvas.width);
+                    const drawX = f.x * scaleX;
+                    const drawY = f.y * scaleY;
+                    const maxW = (f.maxWidth || state.refWidth) * scaleX;
+                    const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
+                    const fSize = f.fontSize * scaleFont;
+
+                    ctx.font = `${f.fontWeight || 'normal'} ${fSize}px Arial, sans-serif`;
+                    const lines = getLines(ctx, f.value, maxW);
                     const totalHeight = lines.length * lh;
                     
-                    let bx = f.x;
-                    if (f.align === 'center') bx = f.x - ((f.maxWidth || canvas.width)/2);
-                    if (f.align === 'right') bx = f.x - (f.maxWidth || canvas.width);
+                    let bx = drawX;
+                    if (f.align === 'center') bx = drawX - (maxW/2);
+                    if (f.align === 'right') bx = drawX - maxW;
 
-                    if (clickX >= bx && clickX <= bx + (f.maxWidth || canvas.width) &&
-                        clickY >= f.y && clickY <= f.y + totalHeight) {
+                    if (baseX >= bx && baseX <= bx + maxW &&
+                        baseY >= drawY && baseY <= drawY + totalHeight) {
                         selectField(f.id);
                         return;
                     }
@@ -727,24 +738,27 @@
 
         // --- Helpers ---
         function zoom(delta) {
-            state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 10));
-            wrapper.style.transform = `scale(${state.zoom})`;
+            state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 5));
+            applyZoom();
         }
 
         function fitToScreen() {
             if (!canvas.width || !canvas.height) return;
             // Wait for layout to settle
             requestAnimationFrame(() => {
-                const containerW = container.clientWidth - 60;
+                const containerW = container.clientWidth - 60; // padding buffer
                 const containerH = container.clientHeight - 60;
                 const scaleX = containerW / canvas.width;
                 const scaleY = containerH / canvas.height;
                 state.zoom = Math.min(scaleX, scaleY, 1);
-                wrapper.style.transform = `scale(${state.zoom})`;
-                
-                // Center it
-                wrapper.style.margin = 'auto';
+                applyZoom();
             });
+        }
+
+        function applyZoom() {
+            // Set visual CSS size strictly based on base canvas width/height * zoom
+            canvas.style.width = `${Math.round(canvas.width * state.zoom)}px`;
+            canvas.style.height = `${Math.round(canvas.height * state.zoom)}px`;
         }
 
         function toggleDebug() {
@@ -756,10 +770,10 @@
             dataJsonArea.value = JSON.stringify(PRESET_DATA, null, 2);
             coordJsonArea.value = JSON.stringify(PRESET_COORD, null, 2);
             
-            if (!state.bgCanvas.width || !state.bgCanvas.height || state.bgCanvas.width === 0) {
+            if (!state.bgCanvas.width || state.bgCanvas.width === 0) {
                 // Create blank white A4 canvas if no PDF is loaded
-                state.bgCanvas.width = state.refWidth * state.renderScale; 
-                state.bgCanvas.height = state.refHeight * state.renderScale;
+                state.bgCanvas.width = Math.round(state.refWidth * state.renderScale);
+                state.bgCanvas.height = Math.round(state.refHeight * state.renderScale);
                 bgCtx.fillStyle = '#ffffff';
                 bgCtx.fillRect(0, 0, state.bgCanvas.width, state.bgCanvas.height);
                 
@@ -804,17 +818,23 @@
                 offCtx.drawImage(state.bgCanvas, 0, 0);
             }
 
+            const scaleX = offCanvas.width / state.refWidth;
+            const scaleY = offCanvas.height / state.refHeight;
+            const scaleFont = (scaleX + scaleY) / 2;
+
             // 2. Draw Text Fields (No Debug Markers)
             state.fields.forEach(f => {
                 offCtx.fillStyle = f.color || '#000000';
-                offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
+                offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize * scaleFont}px Arial, sans-serif`;
                 offCtx.textAlign = f.align || 'left';
                 offCtx.textBaseline = 'top';
 
-                const maxW = f.maxWidth || offCanvas.width;
-                const lh = f.lineHeight || (f.fontSize * 1.4);
+                const drawX = f.x * scaleX;
+                const drawY = f.y * scaleY;
+                const maxW = (f.maxWidth || state.refWidth) * scaleX;
+                const lh = (f.lineHeight || (f.fontSize * 1.4)) * scaleFont;
 
-                drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh);
+                drawWrappedText(offCtx, f.value, drawX, drawY, maxW, lh);
             });
 
             // 3. Trigger Download
