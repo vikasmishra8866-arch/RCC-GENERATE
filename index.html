@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RC Layout Renderer & Mapper (PDF/Image)</title>
-    <!-- Load pdf.js from CDN for PDF rendering -->
+    <title>A4 RC Renderer & Mapper (PDF/Image)</title>
+    <!-- PDF.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root {
@@ -27,34 +27,34 @@
         body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
         /* Header */
-        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-wrap: wrap; gap: 10px; }
         .logo { font-weight: 600; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 8px; }
-        .controls { display: flex; gap: 15px; align-items: center; }
+        .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         
         /* Buttons & Inputs */
-        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 500; }
+        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 5px; }
         button:hover { background: var(--border); }
         button.primary { background: var(--accent); color: white; border-color: var(--accent); }
         button.primary:hover { background: var(--accent-hover); }
-        button.success { background: var(--success); color: white; border-color: var(--success); }
         
-        input[type="text"], input[type="number"], select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 6px; border-radius: 4px; outline: none; width: 100%; font-size: 0.85rem; }
+        input[type="text"], input[type="number"], select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 8px; border-radius: 4px; outline: none; width: 100%; font-size: 0.85rem; }
         input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+        label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 4px; }
         
         /* Layout */
         .workspace { display: flex; flex: 1; overflow: hidden; }
         
         /* Sidebars */
-        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-        .sidebar.right { border-right: none; border-left: 1px solid var(--border); width: 350px; }
+        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); flex-shrink: 0; }
+        .sidebar.right { border-right: none; border-left: 1px solid var(--border); width: 320px; }
         
         .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; background: #181818; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
         
-        .scroll-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .scroll-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
         
         /* Canvas Area */
-        .canvas-container { flex: 1; background: #000; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; }
-        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; }
+        .canvas-container { flex: 1; background: #000; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .canvas-wrapper { transform-origin: top left; box-shadow: 0 0 20px rgba(0,0,0,0.8); position: relative; background: #fff; }
         canvas { display: block; cursor: crosshair; }
         
         .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.85); }
@@ -66,12 +66,11 @@
         .field-item.active { background: var(--debug-bg); border-color: var(--accent); }
         
         .inspector { background: #181818; border-top: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-        .prop-row { display: flex; gap: 8px; align-items: center; }
-        .prop-row > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .prop-row { display: flex; gap: 8px; align-items: flex-end; }
+        .prop-row > div { flex: 1; }
 
-        textarea#jsonArea { flex: 1; width: 100%; height: 200px; font-family: 'Courier New', monospace; font-size: 0.8rem; resize: none; }
-        .json-actions { display: flex; gap: 8px; margin-top: 8px; }
+        /* Status Log */
+        .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); padding: 5px 10px; font-size: 0.75rem; font-family: monospace; color: var(--success); z-index: 10; pointer-events: none; border-top: 1px solid var(--border);}
     </style>
 </head>
 <body>
@@ -79,16 +78,21 @@
     <header>
         <div class="logo">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            RC Renderer (Pro)
+            RC Renderer (A4)
         </div>
         <div class="controls">
             <div style="display:flex; gap:6px; align-items:center;">
                 <button onclick="document.getElementById('fileInput').click()">Upload RC (PDF/IMG)</button>
                 <input type="file" id="fileInput" accept="application/pdf, image/*" style="display: none;" onchange="handleFileUpload(event)">
             </div>
-            <div id="pageControls" style="display:none; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
-                <label>Page:</label>
-                <select id="pageSelect" onchange="changePDFPage(this.value)" style="width: 60px;"></select>
+            <div id="pdfControls" style="display:none; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <select id="pageSelect" onchange="changePDFPage(this.value)" style="width: 80px;"></select>
+            </div>
+            <div style="display:flex; align-items:center; gap: 5px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <select id="orientationSelect" onchange="changeOrientation()" style="width: 100px;">
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
+                </select>
             </div>
             <div style="display:flex; gap:4px; border-left: 1px solid var(--border); padding-left: 15px;">
                 <button onclick="zoom(-0.1)">-</button>
@@ -97,22 +101,32 @@
             </div>
             <div style="display:flex; align-items:center; gap: 6px; border-left: 1px solid var(--border); padding-left: 15px;">
                 <input type="checkbox" id="debugToggle" checked onchange="toggleDebug()">
-                <label for="debugToggle" style="text-transform: none; cursor: pointer;">Show Markers</label>
+                <label for="debugToggle" style="text-transform: none; cursor: pointer; margin-bottom: 0;">Markers</label>
             </div>
-            <button class="primary" onclick="exportPNG()" style="margin-left: 10px;">Download Filled PNG</button>
+            <button class="primary" onclick="exportPNG()" style="margin-left: 10px;">Download PNG</button>
         </div>
     </header>
 
     <div class="workspace">
-        <!-- Left Sidebar: JSON Input -->
+        <!-- Left Sidebar: JSON Inputs -->
         <div class="sidebar">
             <div class="panel-header">JSON Configuration</div>
             <div class="scroll-area">
-                <textarea id="jsonArea" placeholder="Paste your JSON config here..."></textarea>
-                <div class="json-actions">
-                    <button onclick="loadJSON()" class="primary" style="flex:1;">Load / Parse</button>
-                    <button onclick="formatJSON()">Format</button>
+                <div>
+                    <label>Vehicle Data JSON</label>
+                    <textarea id="dataJsonArea" style="height: 120px;" placeholder='{ "regn_no": "GJ05CX1400" }'></textarea>
+                </div>
+                <div>
+                    <label>A4 Coordinate Map JSON</label>
+                    <textarea id="coordJsonArea" style="height: 250px;" placeholder='{ "pageSize": "A4", "fields": { ... } }'></textarea>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="parseAndRender()" class="primary" style="flex:1;">Render Now</button>
                     <button onclick="loadPreset()">Sample</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="formatJSON()" style="flex:1;">Format JSON</button>
+                    <button onclick="copyCoordinates()" style="flex:1;">Copy Coords</button>
                 </div>
             </div>
         </div>
@@ -121,18 +135,19 @@
         <div class="canvas-container" id="canvasContainer">
             <div class="dropzone" id="dropzone">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-bottom: 10px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                <h2>Drag & Drop Blank RC (PDF or Image)</h2>
+                <h2>Drag & Drop Blank RC (PDF/IMG)</h2>
             </div>
             <div class="canvas-wrapper" id="canvasWrapper">
                 <canvas id="mainCanvas"></canvas>
             </div>
+            <div class="status-bar" id="statusLog">Ready.</div>
         </div>
 
         <!-- Right Sidebar: Fields & Fine-Tuning -->
         <div class="sidebar right">
             <div class="panel-header">Mapped Fields</div>
             <div class="scroll-area" id="fieldList" style="max-height: 40%;">
-                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded. Upload file & load JSON.</div>
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded.</div>
             </div>
             
             <div class="panel-header" style="border-top: 1px solid var(--border);">Inspector</div>
@@ -144,10 +159,12 @@
                     <div class="prop-row">
                         <div><label>X</label><input type="number" step="0.5" id="insX" oninput="updateFieldFromInspector('x', this.value)"></div>
                         <div><label>Y</label><input type="number" step="0.5" id="insY" oninput="updateFieldFromInspector('y', this.value)"></div>
-                        <div><label>Max Width</label><input type="number" id="insMaxWidth" oninput="updateFieldFromInspector('maxWidth', this.value)"></div>
                     </div>
                     <div class="prop-row">
+                        <div><label>Max Width</label><input type="number" id="insMaxWidth" oninput="updateFieldFromInspector('maxWidth', this.value)"></div>
                         <div><label>Font Size</label><input type="number" step="0.5" id="insFontSize" oninput="updateFieldFromInspector('fontSize', this.value)"></div>
+                    </div>
+                    <div class="prop-row">
                         <div><label>Line Height</label><input type="number" step="0.5" id="insLineHeight" oninput="updateFieldFromInspector('lineHeight', this.value)"></div>
                         <div><label>Weight</label>
                             <select id="insFontWeight" onchange="updateFieldFromInspector('fontWeight', this.value)">
@@ -164,9 +181,8 @@
                                 <option value="right">Right</option>
                             </select>
                         </div>
-                        <div><label>Color</label><input type="color" id="insColor" style="height: 28px; padding: 0;" onchange="updateFieldFromInspector('color', this.value)"></div>
+                        <div><label>Color</label><input type="color" id="insColor" style="height: 32px; padding: 0;" onchange="updateFieldFromInspector('color', this.value)"></div>
                     </div>
-                    <button class="primary" onclick="copyUpdatedJSON()" style="margin-top: 5px;">Copy Updated JSON</button>
                 </div>
             </div>
         </div>
@@ -178,15 +194,16 @@
 
         // --- State Management ---
         const state = {
-            baseImage: null, // HTMLCanvasElement or Image object representing current page
-            pdfDoc: null,    // Store PDF document for page switching
+            baseImage: null, 
+            pdfDoc: null,    
             currentPage: 1,
             fields: [], 
             activeFieldId: null,
             showDebug: true,
             zoom: 1,
-            refWidth: null,
-            refHeight: null
+            refWidth: 595.28,  // A4 Points Portrait
+            refHeight: 841.89, // A4 Points Portrait
+            renderScale: 3      // High-res rendering scale for PDFs
         };
 
         // --- DOM Elements ---
@@ -198,212 +215,235 @@
         const fieldListEl = document.getElementById('fieldList');
         const inspectorEmpty = document.getElementById('inspectorEmpty');
         const inspectorControls = document.getElementById('inspectorControls');
-        const jsonArea = document.getElementById('jsonArea');
-        const pageControls = document.getElementById('pageControls');
+        const dataJsonArea = document.getElementById('dataJsonArea');
+        const coordJsonArea = document.getElementById('coordJsonArea');
+        const pdfControls = document.getElementById('pdfControls');
         const pageSelect = document.getElementById('pageSelect');
+        const statusLog = document.getElementById('statusLog');
 
-        // --- Preset Data ---
-        const PRESET_JSON = {
-            "metadata": { "refWidth": 612, "refHeight": 792 }, // Standard Letter/A4 pt size
-            "coordinates": {
+        // --- Presets ---
+        const PRESET_DATA = {
+            "regn_no": "GJ05CX1400",
+            "owner_name": "SACHIN TENDULKAR",
+            "address": "FLAT 10, CRICKET AVENUE, BANDRA WEST,\nMUMBAI, MAHARASHTRA - 400050",
+            "chassis_no": "MAT12345678901234",
+            "engine_no": "ENG987654321",
+            "fuel": "PETROL",
+            "maker": "HONDA",
+            "model": "ACTIVA 6G"
+        };
+
+        const PRESET_COORD = {
+            "pageSize": "A4",
+            "refWidth": 595.28,
+            "refHeight": 841.89,
+            "fields": {
                 "regn_no": { "x": 450, "y": 120, "fontSize": 16, "fontWeight": "bold", "maxWidth": 100, "align": "center", "color": "#000000" },
                 "owner_name": { "x": 100, "y": 220, "fontSize": 12, "fontWeight": "normal", "maxWidth": 250, "align": "left", "color": "#000000" },
                 "address": { "x": 100, "y": 250, "fontSize": 10, "fontWeight": "normal", "maxWidth": 300, "lineHeight": 14, "align": "left", "color": "#000000" },
-                "chassis_no": { "x": 400, "y": 220, "fontSize": 12, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" }
-            },
-            "data": {
-                "regn_no": "GJ05CX1400",
-                "owner_name": "SACHIN TENDULKAR",
-                "address": "FLAT 10, CRICKET AVENUE, BANDRA WEST, MUMBAI, MAHARASHTRA - 400050",
-                "chassis_no": "MAT12345678901234"
+                "chassis_no": { "x": 400, "y": 220, "fontSize": 12, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" },
+                "engine_no": { "x": 400, "y": 250, "fontSize": 12, "fontWeight": "normal", "maxWidth": 150, "align": "center", "color": "#000000" }
             }
         };
+
+        // --- Status Logger ---
+        function logMsg(msg, isError = false) {
+            statusLog.innerText = msg;
+            statusLog.style.color = isError ? 'var(--danger)' : 'var(--success)';
+        }
 
         // --- Initialization ---
         function init() {
             setupEvents();
-            canvas.width = 800;
-            canvas.height = 600;
+            canvas.width = state.refWidth * 2; // Default dummy canvas size
+            canvas.height = state.refHeight * 2;
             render();
         }
 
-        // --- File Handling (PDF & Images) ---
+        // --- File Handling ---
         async function handleFileUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
+            logMsg(`Loading file: ${file.name}...`);
 
-            if (file.type === 'application/pdf') {
-                await handlePDF(file);
-            } else if (file.type.startsWith('image/')) {
-                await handleImage(file);
-            } else {
-                alert("Unsupported file type. Please upload PDF or Image.");
+            try {
+                if (file.type === 'application/pdf') {
+                    await handlePDF(file);
+                } else if (file.type.startsWith('image/')) {
+                    await handleImage(file);
+                } else {
+                    throw new Error("Unsupported file type.");
+                }
+            } catch (err) {
+                logMsg(`Error: ${err.message}`, true);
+                alert(`File Load Error: ${err.message}`);
             }
-            e.target.value = ''; // Reset input
+            e.target.value = ''; 
         }
 
         async function handlePDF(file) {
             const arrayBuffer = await file.arrayBuffer();
-            try {
-                state.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
-                
-                // Setup Page Controls
-                pageSelect.innerHTML = '';
-                for (let i = 1; i <= state.pdfDoc.numPages; i++) {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.innerText = i;
-                    pageSelect.appendChild(opt);
-                }
-                pageControls.style.display = 'flex';
-                
-                await renderPDFPage(1);
-                dropzone.style.display = 'none';
-            } catch (error) {
-                alert("Error loading PDF: " + error.message);
+            state.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+            
+            pageSelect.innerHTML = '';
+            for (let i = 1; i <= state.pdfDoc.numPages; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Page ${i}`;
+                pageSelect.appendChild(opt);
             }
+            pdfControls.style.display = 'flex';
+            
+            await renderPDFPage(1);
+            dropzone.style.display = 'none';
+            logMsg("PDF Loaded successfully. Ready to render.");
         }
 
         async function renderPDFPage(pageNum) {
             if (!state.pdfDoc) return;
+            logMsg(`Rendering PDF Page ${pageNum}...`);
             state.currentPage = pageNum;
             pageSelect.value = pageNum;
 
             const page = await state.pdfDoc.getPage(pageNum);
-            // Scale 3x for high resolution text rendering
-            const viewport = page.getViewport({ scale: 3.0 }); 
+            const viewport = page.getViewport({ scale: state.renderScale }); 
             
+            // Create offscreen canvas to hold the PDF image
             const offCanvas = document.createElement('canvas');
             offCanvas.width = viewport.width;
             offCanvas.height = viewport.height;
             const offCtx = offCanvas.getContext('2d');
 
-            await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
+            // Fill white background (PDFs are transparent by default)
+            offCtx.fillStyle = '#ffffff';
+            offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+            const renderContext = {
+                canvasContext: offCtx,
+                viewport: viewport
+            };
+
+            await page.render(renderContext).promise;
             
             state.baseImage = offCanvas;
             resizeCanvas();
         }
 
         async function handleImage(file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    state.baseImage = img;
-                    state.pdfDoc = null; // Clear PDF
-                    pageControls.style.display = 'none';
-                    dropzone.style.display = 'none';
-                    resizeCanvas();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        state.baseImage = img;
+                        state.pdfDoc = null; 
+                        pdfControls.style.display = 'none';
+                        dropzone.style.display = 'none';
+                        resizeCanvas();
+                        logMsg("Image loaded successfully.");
+                        resolve();
+                    };
+                    img.onerror = () => reject(new Error("Failed to load image."));
+                    img.src = event.target.result;
                 };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
+                reader.onerror = () => reject(new Error("Failed to read file."));
+                reader.readAsDataURL(file);
+            });
         }
 
         function changePDFPage(pageNum) {
             renderPDFPage(parseInt(pageNum));
         }
 
+        function changeOrientation() {
+            const orientation = document.getElementById('orientationSelect').value;
+            if (orientation === 'portrait') {
+                state.refWidth = 595.28;
+                state.refHeight = 841.89;
+            } else {
+                state.refWidth = 841.89;
+                state.refHeight = 595.28;
+            }
+            // Update coord JSON box default dimensions
+            try {
+                const parsed = JSON.parse(coordJsonArea.value);
+                parsed.refWidth = state.refWidth;
+                parsed.refHeight = state.refHeight;
+                parsed.pageSize = orientation === 'portrait' ? "A4" : "A4-Landscape";
+                coordJsonArea.value = JSON.stringify(parsed, null, 2);
+            } catch (e) { }
+            
+            parseAndRender();
+        }
+
         function resizeCanvas() {
             if (state.baseImage) {
                 canvas.width = state.baseImage.width || state.baseImage.naturalWidth;
                 canvas.height = state.baseImage.height || state.baseImage.naturalHeight;
+            } else {
+                canvas.width = state.refWidth * 2;
+                canvas.height = state.refHeight * 2;
             }
             render();
             fitCanvas();
             if (state.fields.length > 0) applyScaling();
         }
 
-        // --- JSON Parsing & Normalization ---
-        function loadJSON() {
-            const raw = jsonArea.value.trim();
-            if (!raw) return alert("Please paste JSON first.");
-            
+        // --- JSON Parsing & Scaling ---
+        function parseAndRender() {
             try {
-                const parsed = JSON.parse(raw);
-                state.fields = [];
-
-                // Determine Reference Dimensions
-                let refW = parsed.metadata?.refWidth || parsed.refWidth || null;
-                let refH = parsed.metadata?.refHeight || parsed.refHeight || null;
+                const dataStr = dataJsonArea.value.trim();
+                const coordStr = coordJsonArea.value.trim();
                 
-                state.refWidth = refW;
-                state.refHeight = refH;
+                if (!coordStr) return;
 
-                if (parsed.coordinates && parsed.data) {
-                    // Format B: Coordinates + Data
-                    for (const [key, coord] of Object.entries(parsed.coordinates)) {
-                        state.fields.push({
-                            id: key,
-                            key: key,
-                            value: parsed.data[key] || "",
-                            ...coord
-                        });
-                    }
-                } else if (Array.isArray(parsed)) {
-                    // Format A: Array of fields
-                    parsed.forEach((f, i) => {
-                        state.fields.push({
-                            id: f.key || `field_${i}`,
-                            key: f.key || `field_${i}`,
-                            value: f.value || f.sampleValue || "",
-                            x: f.x, y: f.y, maxWidth: f.maxWidth, fontSize: f.fontSize,
-                            fontWeight: f.fontWeight, align: f.align, color: f.color, lineHeight: f.lineHeight
-                        });
+                const dataObj = dataStr ? JSON.parse(dataStr) : {};
+                const coordObj = JSON.parse(coordStr);
+
+                // Update state reference dimensions based on JSON
+                if (coordObj.refWidth && coordObj.refHeight) {
+                    state.refWidth = coordObj.refWidth;
+                    state.refHeight = coordObj.refHeight;
+                }
+
+                state.fields = [];
+                const fieldMap = coordObj.fields || coordObj.coordinates || coordObj; // Support different formats
+
+                for (const [key, config] of Object.entries(fieldMap)) {
+                    if (key === 'pageSize' || key === 'refWidth' || key === 'refHeight') continue;
+                    
+                    state.fields.push({
+                        id: key,
+                        key: key,
+                        value: dataObj[key] || "",
+                        ...config
                     });
-                } else {
-                    throw new Error("Invalid format. Expected Array or {coordinates, data} object.");
                 }
 
                 applyScaling();
                 renderFieldList();
                 render();
-                alert(`Successfully loaded ${state.fields.length} fields.`);
-
+                logMsg(`Successfully parsed and rendered ${state.fields.length} fields.`);
+                
             } catch (err) {
-                alert("Invalid JSON: " + err.message);
+                logMsg(`JSON Error: ${err.message}`, true);
+                // Don't alert on every keystroke, just log it
             }
         }
 
-        function formatJSON() {
-            try {
-                const parsed = JSON.parse(jsonArea.value);
-                jsonArea.value = JSON.stringify(parsed, null, 2);
-            } catch (e) {
-                alert("Cannot format invalid JSON.");
-            }
-        }
-
-        function loadPreset() {
-            jsonArea.value = JSON.stringify(PRESET_JSON, null, 2);
-            if (!state.baseImage) {
-                // Create a dummy white image if no PDF/IMG is loaded
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = 612 * 2; // Simulate 2x scale of ref
-                tempCanvas.height = 792 * 2;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.fillStyle = '#ffffff';
-                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-                state.baseImage = tempCanvas;
-                dropzone.style.display = 'none';
-                resizeCanvas();
-            }
-            loadJSON();
-        }
-
-        // --- Coordinate Scaling Logic ---
         function applyScaling() {
-            if (!state.baseImage || !state.refWidth || !state.refHeight) return;
+            if (!state.baseImage) return;
             
-            const imgW = state.baseImage.width || state.baseImage.naturalWidth;
-            const imgH = state.baseImage.height || state.baseImage.naturalHeight;
+            const imgW = canvas.width;
+            const imgH = canvas.height;
 
+            // Calculate scale factors
             const scaleX = imgW / state.refWidth;
             const scaleY = imgH / state.refHeight;
-            const scaleFont = (scaleX + scaleY) / 2; // Average scale for text
+            const scaleFont = (scaleX + scaleY) / 2; 
 
             state.fields.forEach(f => {
-                // Preserve original values for re-scaling
+                // Preserve base values for re-scaling
                 if (!f._base) {
                     f._base = {
                         x: f.x, y: f.y, maxWidth: f.maxWidth,
@@ -411,7 +451,6 @@
                     };
                 }
 
-                // Apply scaled values
                 f.x = f._base.x * scaleX;
                 f.y = f._base.y * scaleY;
                 f.maxWidth = f._base.maxWidth * scaleX;
@@ -426,6 +465,9 @@
 
             if (state.baseImage) {
                 ctx.drawImage(state.baseImage, 0, 0);
+            } else {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
 
             state.fields.forEach(f => {
@@ -437,19 +479,16 @@
                 const maxW = f.maxWidth || canvas.width;
                 const lh = f.lineHeight || (f.fontSize * 1.4);
 
-                // Render text
                 drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh);
 
-                // Debug Overlays
                 if (state.showDebug) {
                     const lines = getLines(ctx, f.value, maxW);
                     const totalHeight = lines.length * lh;
 
                     ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
-                    ctx.lineWidth = Math.max(1, canvas.width / 1000); // Dynamic line width
+                    ctx.lineWidth = Math.max(1, canvas.width / 800); 
                     ctx.setLineDash([5, 5]);
 
-                    // Bounding Box calculation based on alignment
                     let bx = f.x;
                     if (f.align === 'center') bx = f.x - (maxW/2);
                     if (f.align === 'right') bx = f.x - maxW;
@@ -457,16 +496,14 @@
                     ctx.strokeRect(bx, f.y, maxW, totalHeight);
                     ctx.setLineDash([]);
 
-                    // Crosshair
                     ctx.beginPath();
                     ctx.moveTo(f.x - 10, f.y); ctx.lineTo(f.x + 10, f.y);
                     ctx.moveTo(f.x, f.y - 10); ctx.lineTo(f.x, f.y + 10);
                     ctx.stroke();
 
-                    // Label
                     ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
-                    ctx.font = '12px monospace';
-                    ctx.fillText(f.key, bx, f.y - 16);
+                    ctx.font = `${Math.max(10, canvas.width/80)}px monospace`;
+                    ctx.fillText(f.key, bx, f.y - 20);
                 }
             });
         }
@@ -559,39 +596,52 @@
             render();
         }
 
-        function copyUpdatedJSON() {
-            if (!state.baseImage) return alert("Load a file first.");
-            
+        function copyCoordinates() {
             const output = {
-                metadata: {
-                    refWidth: state.baseImage.width || state.baseImage.naturalWidth,
-                    refHeight: state.baseImage.height || state.baseImage.naturalHeight
-                },
-                coordinates: {},
-                data: {}
+                pageSize: document.getElementById('orientationSelect').value === 'portrait' ? "A4" : "A4-Landscape",
+                refWidth: state.refWidth,
+                refHeight: state.refHeight,
+                fields: {}
             };
 
+            // Convert back to reference space
+            const imgW = canvas.width;
+            const imgH = canvas.height;
+            const scaleX = imgW / state.refWidth;
+            const scaleY = imgH / state.refHeight;
+            const scaleFont = (scaleX + scaleY) / 2; 
+
             state.fields.forEach(f => {
-                output.coordinates[f.key] = {
-                    x: parseFloat(f.x.toFixed(2)),
-                    y: parseFloat(f.y.toFixed(2)),
-                    maxWidth: parseFloat(f.maxWidth.toFixed(2)),
-                    fontSize: parseFloat(f.fontSize.toFixed(2)),
-                    lineHeight: parseFloat(f.lineHeight.toFixed(2)),
+                output.fields[f.key] = {
+                    x: parseFloat((f.x / scaleX).toFixed(2)),
+                    y: parseFloat((f.y / scaleY).toFixed(2)),
+                    maxWidth: parseFloat((f.maxWidth / scaleX).toFixed(2)),
+                    fontSize: parseFloat((f.fontSize / scaleFont).toFixed(2)),
+                    lineHeight: parseFloat((f.lineHeight / scaleFont).toFixed(2)),
                     fontWeight: f.fontWeight,
                     align: f.align,
                     color: f.color
                 };
-                output.data[f.key] = f.value;
             });
 
-            navigator.clipboard.writeText(JSON.stringify(output, null, 2)).then(() => {
-                alert("Updated JSON copied to clipboard!");
+            const jsonStr = JSON.stringify(output, null, 2);
+            coordJsonArea.value = jsonStr;
+            navigator.clipboard.writeText(jsonStr).then(() => {
+                logMsg("Updated Coordinate JSON copied to clipboard!");
             });
         }
 
         // --- Canvas Interactions ---
         function setupEvents() {
+            // Auto-parse on input
+            let timeout = null;
+            const debounceParse = () => {
+                clearTimeout(timeout);
+                timeout = setTimeout(parseAndRender, 500);
+            };
+            dataJsonArea.addEventListener('input', debounceParse);
+            coordJsonArea.addEventListener('input', debounceParse);
+
             // Zoom
             container.addEventListener('wheel', (e) => {
                 if (e.ctrlKey) {
@@ -600,15 +650,15 @@
                 }
             });
 
-            // Click to select field
+            // Click to select
             canvas.addEventListener('mousedown', (e) => {
+                if (state.fields.length === 0) return;
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
                 const clickX = (e.clientX - rect.left) * scaleX;
                 const clickY = (e.clientY - rect.top) * scaleY;
 
-                // Reverse iterate to get topmost field
                 for (let i = state.fields.length - 1; i >= 0; i--) {
                     const f = state.fields[i];
                     const lh = f.lineHeight || (f.fontSize * 1.4);
@@ -625,14 +675,13 @@
                         return;
                     }
                 }
-                // Deselect
                 state.activeFieldId = null;
                 updateInspector();
                 render();
                 renderFieldList();
             });
 
-            // Arrow keys for nudging
+            // Arrow keys
             window.addEventListener('keydown', (e) => {
                 if (!state.activeFieldId || ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
                 const f = state.fields.find(x => x.id === state.activeFieldId);
@@ -672,9 +721,9 @@
         }
 
         function fitCanvas() {
-            if (!state.baseImage) return;
-            const containerW = container.clientWidth - 40;
-            const containerH = container.clientHeight - 40;
+            if (!canvas.width || !canvas.height) return;
+            const containerW = container.clientWidth - 60;
+            const containerH = container.clientHeight - 60;
             const scaleX = containerW / canvas.width;
             const scaleY = containerH / canvas.height;
             state.zoom = Math.min(scaleX, scaleY, 1);
@@ -686,20 +735,52 @@
             render();
         }
 
-        // --- Export Clean Image ---
-        function exportPNG() {
-            if (!state.baseImage) return alert("Please upload a template first.");
+        function loadPreset() {
+            dataJsonArea.value = JSON.stringify(PRESET_DATA, null, 2);
+            coordJsonArea.value = JSON.stringify(PRESET_COORD, null, 2);
+            
+            if (!state.baseImage) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = state.refWidth * 2; 
+                tempCanvas.height = state.refHeight * 2;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.fillStyle = '#ffffff';
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                state.baseImage = tempCanvas;
+                dropzone.style.display = 'none';
+                resizeCanvas();
+            }
+            parseAndRender();
+            logMsg("Preset loaded.");
+        }
 
-            // Create offscreen canvas at true resolution
+        function formatJSON() {
+            try {
+                if (dataJsonArea.value.trim()) {
+                    dataJsonArea.value = JSON.stringify(JSON.parse(dataJsonArea.value), null, 2);
+                }
+                if (coordJsonArea.value.trim()) {
+                    coordJsonArea.value = JSON.stringify(JSON.parse(coordJsonArea.value), null, 2);
+                }
+                logMsg("JSON formatted.");
+            } catch (e) {
+                logMsg("Cannot format invalid JSON.", true);
+            }
+        }
+
+        // --- Export ---
+        function exportPNG() {
+            if (!state.baseImage) return alert("Please load a template first.");
+
             const offCanvas = document.createElement('canvas');
             offCanvas.width = canvas.width;
             offCanvas.height = canvas.height;
             const offCtx = offCanvas.getContext('2d');
 
-            // Draw Background
+            offCtx.fillStyle = '#ffffff';
+            offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
             offCtx.drawImage(state.baseImage, 0, 0);
 
-            // Draw Fields
             state.fields.forEach(f => {
                 offCtx.fillStyle = f.color || '#000000';
                 offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
@@ -712,11 +793,11 @@
                 drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh);
             });
 
-            // Download
             const link = document.createElement('a');
             link.download = `filled_rc_${Date.now()}.png`;
             link.href = offCanvas.toDataURL('image/png');
             link.click();
+            logMsg("Exported high-res PNG successfully.");
         }
 
         // Start
