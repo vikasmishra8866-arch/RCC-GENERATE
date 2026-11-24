@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RC Layout Renderer & Mapper</title>
+    <style>
+        :root {
+            --bg-base: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-hover: #2d2d2d;
+            --bg-input: #0a0a0a;
+            --text-main: #e0e0e0;
+            --text-muted: #888888;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --border: #333333;
+            --danger: #ef4444;
+            --success: #10b981;
+            --debug-line: rgba(59, 130, 246, 0.8);
+            --debug-bg: rgba(59, 130, 246, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Header */
+        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        .logo { font-weight: 600; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+        .controls { display: flex; gap: 15px; align-items: center; }
+        
+        /* Buttons & Inputs */
+        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 500; }
+        button:hover { background: var(--border); }
+        button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+        button.primary:hover { background: var(--accent-hover); }
+        button.success { background: var(--success); color: white; border-color: var(--success); }
+        button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+        button.danger:hover { background: var(--danger); color: white; }
+        
+        input[type="text"], input[type="number"], select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 6px; border-radius: 4px; outline: none; width: 100%; font-size: 0.85rem; }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+        
+        /* Layout */
+        .workspace { display: flex; flex: 1; overflow: hidden; }
+        
+        /* Sidebars */
+        .sidebar { background: var(--bg-panel); width: 350px; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+        .sidebar.right { border-right: none; border-left: 1px solid var(--border); width: 350px; }
+        
+        .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; background: #181818; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        
+        .scroll-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        
+        /* Canvas Area */
+        .canvas-container { flex: 1; background: #000; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        .canvas-wrapper { transform-origin: center center; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        canvas { display: block; cursor: crosshair; }
+        
+        .dropzone { position: absolute; inset: 20px; border: 2px dashed var(--border); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: 0.2s; z-index: 5; background: rgba(0,0,0,0.8); }
+        .dropzone.active { opacity: 1; pointer-events: all; border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+        
+        /* Field List & Inspector */
+        .field-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: 0.1s; }
+        .field-item:hover { border-color: var(--accent); }
+        .field-item.active { background: var(--debug-bg); border-color: var(--accent); }
+        
+        .inspector { background: #181818; border-top: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+        .prop-row { display: flex; gap: 8px; align-items: center; }
+        .prop-row > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+
+        textarea#jsonArea { flex: 1; width: 100%; height: 200px; font-family: 'Courier New', monospace; font-size: 0.8rem; resize: none; }
+        .json-actions { display: flex; gap: 8px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            RC Renderer
+        </div>
+        <div class="controls">
+            <div style="display:flex; gap:6px; align-items:center;">
+                <button onclick="document.getElementById('imageInput').click()">Upload Blank RC</button>
+                <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+            </div>
+            <div style="display:flex; gap:4px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <button onclick="zoom(-0.1)">-</button>
+                <button onclick="fitCanvas()">Fit</button>
+                <button onclick="zoom(0.1)">+</button>
+            </div>
+            <div style="display:flex; align-items:center; gap: 6px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <input type="checkbox" id="debugToggle" checked onchange="toggleDebug()">
+                <label for="debugToggle" style="text-transform: none; cursor: pointer;">Show Markers</label>
+            </div>
+            <button class="primary" onclick="exportPNG()" style="margin-left: 10px;">Download Filled RC</button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Left Sidebar: JSON Input -->
+        <div class="sidebar">
+            <div class="panel-header">JSON Configuration</div>
+            <div class="scroll-area">
+                <textarea id="jsonArea" placeholder="Paste your JSON config or data here..."></textarea>
+                <div class="json-actions">
+                    <button onclick="loadJSON()" class="primary" style="flex:1;">Load / Parse JSON</button>
+                    <button onclick="formatJSON()">Format</button>
+                    <button onclick="loadPreset()">Preset</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center: Canvas Viewport -->
+        <div class="canvas-container" id="canvasContainer">
+            <div class="dropzone" id="dropzone">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-bottom: 10px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <h2>Drag & Drop Blank RC Template</h2>
+            </div>
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Sidebar: Fields & Fine-Tuning -->
+        <div class="sidebar right">
+            <div class="panel-header">Mapped Fields</div>
+            <div class="scroll-area" id="fieldList" style="max-height: 40%;">
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 20px;">No fields loaded. Upload image & load JSON.</div>
+            </div>
+            
+            <div class="panel-header" style="border-top: 1px solid var(--border);">Inspector</div>
+            <div class="inspector">
+                <div id="inspectorEmpty" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Select a field on canvas or list to edit.</div>
+                
+                <div id="inspectorControls" style="display: none; flex-direction: column; gap: 10px;">
+                    <div style="font-weight: bold; color: var(--accent); font-size: 0.9rem;" id="insKey">field_key</div>
+                    <div class="prop-row">
+                        <div><label>X</label><input type="number" step="0.5" id="insX" oninput="updateFieldFromInspector('x', this.value)"></div>
+                        <div><label>Y</label><input type="number" step="0.5" id="insY" oninput="updateFieldFromInspector('y', this.value)"></div>
+                        <div><label>Max Width</label><input type="number" id="insMaxWidth" oninput="updateFieldFromInspector('maxWidth', this.value)"></div>
+                    </div>
+                    <div class="prop-row">
+                        <div><label>Font Size</label><input type="number" step="0.5" id="insFontSize" oninput="updateFieldFromInspector('fontSize', this.value)"></div>
+                        <div><label>Line Height</label><input type="number" step="0.5" id="insLineHeight" oninput="updateFieldFromInspector('lineHeight', this.value)"></div>
+                        <div><label>Weight</label>
+                            <select id="insFontWeight" onchange="updateFieldFromInspector('fontWeight', this.value)">
+                                <option value="normal">Normal</option>
+                                <option value="bold">Bold</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <div><label>Align</label>
+                            <select id="insAlign" onchange="updateFieldFromInspector('align', this.value)">
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                        <div><label>Color</label><input type="color" id="insColor" style="height: 28px; padding: 0;" onchange="updateFieldFromInspector('color', this.value)"></div>
+                    </div>
+                    <button class="primary" onclick="copyUpdatedJSON()" style="margin-top: 5px;">Copy Updated JSON</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            img: null,
+            fields: [], // Internal normalized fields
+            activeFieldId: null,
+            showDebug: true,
+            zoom: 1,
+            refWidth: null,
+            refHeight: null,
+            originalJSON: null // To maintain structure on export if needed
+        };
+
+        // --- DOM Elements ---
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvasWrapper');
+        const dropzone = document.getElementById('dropzone');
+        const container = document.getElementById('canvasContainer');
+        const fieldListEl = document.getElementById('fieldList');
+        const inspectorEmpty = document.getElementById('inspectorEmpty');
+        const inspectorControls = document.getElementById('inspectorControls');
+        const jsonArea = document.getElementById('jsonArea');
+
+        // --- Preset Data ---
+        const PRESET_JSON = {
+            "metadata": { "refWidth": 1000, "refHeight": 1414 },
+            "coordinates": {
+                "regn_no": { "x": 800, "y": 250, "fontSize": 28, "fontWeight": "bold", "maxWidth": 150, "align": "center", "color": "#000000" },
+                "owner_name": { "x": 200, "y": 400, "fontSize": 20, "fontWeight": "normal", "maxWidth": 400, "align": "left", "color": "#000000" },
+                "address": { "x": 200, "y": 450, "fontSize": 18, "fontWeight": "normal", "maxWidth": 500, "lineHeight": 24, "align": "left", "color": "#000000" },
+                "chassis_no": { "x": 700, "y": 400, "fontSize": 22, "fontWeight": "bold", "maxWidth": 250, "align": "center", "color": "#000000" }
+            },
+            "data": {
+                "regn_no": "GJ05CX1400",
+                "owner_name": "SACHIN TENDULKAR",
+                "address": "FLAT 10, CRICKET AVENUE, BANDRA WEST, MUMBAI, MAHARASHTRA - 400050",
+                "chassis_no": "MAT12345678901234"
+            }
+        };
+
+        // --- Initialization ---
+        function init() {
+            setupEvents();
+            resizeCanvas();
+        }
+
+        // --- Canvas & Image Handling ---
+        function resizeCanvas() {
+            if (state.img) {
+                canvas.width = state.img.naturalWidth;
+                canvas.height = state.img.naturalHeight;
+            } else {
+                canvas.width = 800;
+                canvas.height = 600;
+            }
+            render();
+            fitCanvas();
+        }
+
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.img = img;
+                    dropzone.style.display = 'none';
+                    resizeCanvas();
+                    if (state.fields.length > 0) applyScaling(); // Re-apply scaling for new image
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // --- JSON Parsing & Normalization ---
+        function loadJSON() {
+            const raw = jsonArea.value.trim();
+            if (!raw) return alert("Please paste JSON first.");
+            
+            try {
+                const parsed = JSON.parse(raw);
+                state.originalJSON = parsed;
+                state.fields = [];
+
+                // Detect format
+                let refW = parsed.metadata?.refWidth || parsed.refWidth;
+                let refH = parsed.metadata?.refHeight || parsed.refHeight;
+                
+                state.refWidth = refW;
+                state.refHeight = refH;
+
+                if (parsed.coordinates && parsed.data) {
+                    // Format B (Coordinates + Data separated)
+                    for (const [key, coord] of Object.entries(parsed.coordinates)) {
+                        state.fields.push({
+                            id: key,
+                            key: key,
+                            value: parsed.data[key] || "",
+                            ...coord
+                        });
+                    }
+                } else if (Array.isArray(parsed)) {
+                    // Format A (Array of fields)
+                    parsed.forEach((f, i) => {
+                        state.fields.push({
+                            id: f.key || `field_${i}`,
+                            key: f.key || `field_${i}`,
+                            value: f.value || f.sampleValue || "",
+                            x: f.x, y: f.y, maxWidth: f.maxWidth, fontSize: f.fontSize,
+                            fontWeight: f.fontWeight, align: f.align, color: f.color, lineHeight: f.lineHeight
+                        });
+                    });
+                } else {
+                    throw new Error("Unknown JSON format. Expected Array or {coordinates, data} object.");
+                }
+
+                applyScaling();
+                renderFieldList();
+                render();
+                alert(`Successfully loaded ${state.fields.length} fields.`);
+
+            } catch (err) {
+                alert("Invalid JSON: " + err.message);
+            }
+        }
+
+        function formatJSON() {
+            try {
+                const parsed = JSON.parse(jsonArea.value);
+                jsonArea.value = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                alert("Cannot format invalid JSON.");
+            }
+        }
+
+        function loadPreset() {
+            jsonArea.value = JSON.stringify(PRESET_JSON, null, 2);
+            // Auto create a blank white canvas if no image
+            if (!state.img) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 1000;
+                tempCanvas.height = 1414;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.fillStyle = '#ffffff';
+                tempCtx.fillRect(0, 0, 1000, 1414);
+                const img = new Image();
+                img.onload = () => {
+                    state.img = img;
+                    dropzone.style.display = 'none';
+                    resizeCanvas();
+                    loadJSON();
+                };
+                img.src = tempCanvas.toDataURL();
+            } else {
+                loadJSON();
+            }
+        }
+
+        // --- Scaling Logic ---
+        function applyScaling() {
+            if (!state.img || !state.refWidth || !state.refHeight) return;
+            
+            const scaleX = state.img.naturalWidth / state.refWidth;
+            const scaleY = state.img.naturalHeight / state.refHeight;
+
+            // Use average scale for fonts/lines to prevent weird stretching if aspect ratio changes slightly
+            const scaleFont = (scaleX + scaleY) / 2;
+
+            state.fields.forEach(f => {
+                // Base values stored to allow re-scaling if image changes
+                if (!f._base) {
+                    f._base = {
+                        x: f.x, y: f.y, maxWidth: f.maxWidth,
+                        fontSize: f.fontSize, lineHeight: f.lineHeight || (f.fontSize * 1.4)
+                    };
+                }
+
+                f.x = f._base.x * scaleX;
+                f.y = f._base.y * scaleY;
+                f.maxWidth = f._base.maxWidth * scaleX;
+                f.fontSize = f._base.fontSize * scaleFont;
+                f.lineHeight = f._base.lineHeight * scaleFont;
+            });
+        }
+
+        // --- Rendering Engine ---
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Image
+            if (state.img) {
+                ctx.drawImage(state.img, 0, 0);
+            }
+
+            // Draw Fields
+            state.fields.forEach(f => {
+                ctx.fillStyle = f.color || '#000000';
+                ctx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
+                ctx.textAlign = f.align || 'left';
+                ctx.textBaseline = 'top';
+
+                const maxW = f.maxWidth || canvas.width;
+                const lh = f.lineHeight || (f.fontSize * 1.4);
+
+                // Render actual value
+                drawWrappedText(ctx, f.value, f.x, f.y, maxW, lh, false);
+
+                // Debug Overlays
+                if (state.showDebug) {
+                    const lines = getLines(ctx, f.value, maxW);
+                    const totalHeight = lines.length * lh;
+
+                    ctx.strokeStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+
+                    // Bounding Box
+                    let bx = f.x;
+                    if (f.align === 'center') bx = f.x - (maxW/2);
+                    if (f.align === 'right') bx = f.x - maxW;
+
+                    ctx.strokeRect(bx, f.y, maxW, totalHeight);
+                    ctx.setLineDash([]);
+
+                    // Crosshair
+                    ctx.beginPath();
+                    ctx.moveTo(f.x - 10, f.y); ctx.lineTo(f.x + 10, f.y);
+                    ctx.moveTo(f.x, f.y - 10); ctx.lineTo(f.x, f.y + 10);
+                    ctx.stroke();
+
+                    // Label
+                    ctx.fillStyle = state.activeFieldId === f.id ? 'var(--danger)' : 'var(--debug-line)';
+                    ctx.font = '12px monospace';
+                    ctx.fillText(f.key, bx, f.y - 16);
+                }
+            });
+        }
+
+        function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, isExport) {
+            const lines = getLines(ctx, text, maxWidth);
+            lines.forEach((line, index) => {
+                ctx.fillText(line, x, y + (index * lineHeight));
+            });
+        }
+
+        function getLines(ctx, text, maxWidth) {
+            const paragraphs = String(text).split('\n');
+            let allLines = [];
+
+            paragraphs.forEach(para => {
+                if (!para) { allLines.push(''); return; }
+                const words = para.split(' ');
+                let currentLine = words[0];
+
+                for (let i = 1; i < words.length; i++) {
+                    const word = words[i];
+                    const width = ctx.measureText(currentLine + " " + word).width;
+                    if (width < maxWidth) {
+                        currentLine += " " + word;
+                    } else {
+                        allLines.push(currentLine);
+                        currentLine = word;
+                    }
+                }
+                allLines.push(currentLine);
+            });
+            return allLines;
+        }
+
+        // --- UI Interactivity (Field List & Inspector) ---
+        function renderFieldList() {
+            fieldListEl.innerHTML = '';
+            if (state.fields.length === 0) {
+                fieldListEl.innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: 20px;">No fields loaded.</div>';
+                return;
+            }
+
+            state.fields.forEach(f => {
+                const div = document.createElement('div');
+                div.className = `field-item ${state.activeFieldId === f.id ? 'active' : ''}`;
+                div.innerHTML = `<span style="font-weight:600; font-size:0.85rem;">${f.key}</span> <span style="color:var(--text-muted); font-size:0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.value}</span>`;
+                div.onclick = () => selectField(f.id);
+                fieldListEl.appendChild(div);
+            });
+        }
+
+        function selectField(id) {
+            state.activeFieldId = id;
+            renderFieldList();
+            render();
+            updateInspector();
+        }
+
+        function updateInspector() {
+            const field = state.fields.find(f => f.id === state.activeFieldId);
+            if (!field) {
+                inspectorEmpty.style.display = 'block';
+                inspectorControls.style.display = 'none';
+                return;
+            }
+            inspectorEmpty.style.display = 'none';
+            inspectorControls.style.display = 'flex';
+
+            document.getElementById('insKey').innerText = field.key;
+            document.getElementById('insX').value = field.x.toFixed(1);
+            document.getElementById('insY').value = field.y.toFixed(1);
+            document.getElementById('insMaxWidth').value = field.maxWidth.toFixed(1);
+            document.getElementById('insFontSize').value = field.fontSize.toFixed(1);
+            document.getElementById('insLineHeight').value = field.lineHeight.toFixed(1);
+            document.getElementById('insFontWeight').value = field.fontWeight || 'normal';
+            document.getElementById('insAlign').value = field.align || 'left';
+            document.getElementById('insColor').value = field.color || '#000000';
+        }
+
+        function updateFieldFromInspector(prop, val) {
+            const field = state.fields.find(f => f.id === state.activeFieldId);
+            if (!field) return;
+
+            if (['x', 'y', 'maxWidth', 'fontSize', 'lineHeight'].includes(prop)) {
+                field[prop] = parseFloat(val) || 0;
+                // Update base so it doesn't snap back on re-scale
+                if (field._base) field._base[prop] = field[prop] / (prop === 'fontSize' || prop === 'lineHeight' ? 1 : 1); 
+            } else {
+                field[prop] = val;
+            }
+            render();
+        }
+
+        function copyUpdatedJSON() {
+            // Reconstruct JSON
+            const output = {
+                metadata: {
+                    refWidth: state.img ? state.img.naturalWidth : 1000,
+                    refHeight: state.img ? state.img.naturalHeight : 1414
+                },
+                coordinates: {},
+                data: {}
+            };
+
+            state.fields.forEach(f => {
+                output.coordinates[f.key] = {
+                    x: parseFloat(f.x.toFixed(2)),
+                    y: parseFloat(f.y.toFixed(2)),
+                    maxWidth: parseFloat(f.maxWidth.toFixed(2)),
+                    fontSize: parseFloat(f.fontSize.toFixed(2)),
+                    lineHeight: parseFloat(f.lineHeight.toFixed(2)),
+                    fontWeight: f.fontWeight,
+                    align: f.align,
+                    color: f.color
+                };
+                output.data[f.key] = f.value;
+            });
+
+            navigator.clipboard.writeText(JSON.stringify(output, null, 2)).then(() => {
+                alert("Updated JSON copied to clipboard!");
+            });
+        }
+
+        // --- Canvas Interactions ---
+        function setupEvents() {
+            // Zoom
+            container.addEventListener('wheel', (e) => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    zoom(e.deltaY > 0 ? -0.1 : 0.1);
+                }
+            });
+
+            // Click to select field
+            canvas.addEventListener('mousedown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = (e.clientX - rect.left) / state.zoom;
+                const clickY = (e.clientY - rect.top) / state.zoom;
+
+                // Reverse iterate to get top-most field
+                for (let i = state.fields.length - 1; i >= 0; i--) {
+                    const f = state.fields[i];
+                    const lh = f.lineHeight || (f.fontSize * 1.4);
+                    const lines = getLines(ctx, f.value, f.maxWidth || canvas.width);
+                    const totalHeight = lines.length * lh;
+                    
+                    let bx = f.x;
+                    if (f.align === 'center') bx = f.x - ((f.maxWidth || canvas.width)/2);
+                    if (f.align === 'right') bx = f.x - (f.maxWidth || canvas.width);
+
+                    if (clickX >= bx && clickX <= bx + (f.maxWidth || canvas.width) &&
+                        clickY >= f.y && clickY <= f.y + totalHeight) {
+                        selectField(f.id);
+                        return;
+                    }
+                }
+                // Deselect if clicked empty space
+                state.activeFieldId = null;
+                updateInspector();
+                render();
+                renderFieldList();
+            });
+
+            // Arrow keys for nudging
+            window.addEventListener('keydown', (e) => {
+                if (!state.activeFieldId) return;
+                const f = state.fields.find(x => x.id === state.activeFieldId);
+                if (!f) return;
+
+                const step = e.shiftKey ? 1 : 0.5;
+                let changed = false;
+
+                if (e.key === 'ArrowLeft') { f.x -= step; changed = true; }
+                if (e.key === 'ArrowRight') { f.x += step; changed = true; }
+                if (e.key === 'ArrowUp') { f.y -= step; changed = true; }
+                if (e.key === 'ArrowDown') { f.y += step; changed = true; }
+
+                if (changed) {
+                    e.preventDefault();
+                    updateInspector();
+                    render();
+                }
+            });
+
+            // Drag & Drop Image
+            dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('active'); });
+            dropzone.addEventListener('dragleave', () => dropzone.classList.remove('active'));
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('active');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleImageUpload({ target: { files: e.dataTransfer.files } });
+                }
+            });
+        }
+
+        // --- Helpers ---
+        function zoom(delta) {
+            state.zoom = Math.max(0.1, Math.min(state.zoom + delta, 5));
+            wrapper.style.transform = `scale(${state.zoom})`;
+        }
+
+        function fitCanvas() {
+            if (!state.img) return;
+            const containerW = container.clientWidth - 40;
+            const containerH = container.clientHeight - 40;
+            const scaleX = containerW / canvas.width;
+            const scaleY = containerH / canvas.height;
+            state.zoom = Math.min(scaleX, scaleY, 1);
+            wrapper.style.transform = `scale(${state.zoom})`;
+        }
+
+        function toggleDebug() {
+            state.showDebug = document.getElementById('debugToggle').checked;
+            render();
+        }
+
+        // --- Export Clean Image ---
+        function exportPNG() {
+            if (!state.img) return alert("Please upload a blank RC template first.");
+
+            // Create an offscreen canvas at native resolution
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = state.img.naturalWidth;
+            offCanvas.height = state.img.naturalHeight;
+            const offCtx = offCanvas.getContext('2d');
+
+            // 1. Draw Background
+            offCtx.drawImage(state.img, 0, 0);
+
+            // 2. Draw Fields (Without Debug)
+            state.fields.forEach(f => {
+                offCtx.fillStyle = f.color || '#000000';
+                offCtx.font = `${f.fontWeight || 'normal'} ${f.fontSize}px Arial, sans-serif`;
+                offCtx.textAlign = f.align || 'left';
+                offCtx.textBaseline = 'top';
+
+                const maxW = f.maxWidth || offCanvas.width;
+                const lh = f.lineHeight || (f.fontSize * 1.4);
+
+                drawWrappedText(offCtx, f.value, f.x, f.y, maxW, lh, true);
+            });
+
+            // 3. Trigger Download
+            const link = document.createElement('a');
+            link.download = `filled_rc_${Date.now()}.png`;
+            link.href = offCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
